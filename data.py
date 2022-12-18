@@ -1,10 +1,14 @@
 import torch
+from torch.utils.data import Dataset
 import pandas as pd
 
-class Dataset(torch.utils.data.Dataset):
+
+class makeDataset(Dataset):
     def __init__(self, data, targets):
-        self.data = data
-        self.targets = targets
+        data = pd.read_csv('data/avocado.csv')
+        # make to tensor
+        self.data = torch.tensor(data.values, dtype=torch.float32)
+        self.targets = torch.tensor(targets.values, dtype=torch.float32)
 
     def __len__(self):
         return len(self.data)
@@ -13,5 +17,4 @@ class Dataset(torch.utils.data.Dataset):
         return self.data[idx], self.targets[idx]
 
 
-data = pd.read_csv('data/avocado.csv')
-dataset = Dataset(data, data['AveragePrice'])
+
