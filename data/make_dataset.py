@@ -28,8 +28,8 @@ def make_dataset_from_curves(curve_list, name_of_dataset='dataset'):
             #df = pd.concat([df, pd.read_pickle(file)], axis=1)
             tmp_df = pd.read_pickle(file)
             # check if curve contains numeric values
-            if tmp_df.dtypes[0] == 'float64':
-                df_curves_list.append(tmp_df)
+            #if tmp_df.dtypes[0] == 'float64': ## WAS INDENTED
+            df_curves_list.append(tmp_df)
 
             # prepend curve name to column names
         if len(df_curves_list) > 0:
@@ -54,5 +54,7 @@ some_curves = ['AcceptedAggregatedOffers_17.1.D',
                'ActualGenerationOutputPerGenerationUnit_16.1.A',
                'ActualTotalLoad_6.1.A']
 
-all_curves = [file[file.rfind('\\') + 1:] for file in glob.glob('data/data/*')]
-tmp_df = make_dataset_from_curves(all_curves, name_of_dataset='all_numeric_curves')
+day_ahead_prices = ['DayAheadPrices_12.1.D']
+make_dataset_from_curves(day_ahead_prices, name_of_dataset='day_ahead_prices')
+#all_curves = [file[file.rfind('\\') + 1:] for file in glob.glob('data/data/*')]
+#tmp_df = make_dataset_from_curves(all_curves, name_of_dataset='all_numeric_curves')
