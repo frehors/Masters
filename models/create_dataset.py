@@ -12,11 +12,25 @@ def create_dataset(target_col='DK1_price'):
     # pivot our MapCode and ProductionType
     df = df.pivot_table(index='DateTime', columns=['MapCode', 'ProductionType'], values='AggregatedGenerationForecast')
 
-    # drop SE Solar, since only avaialble from 2022
+    # drop SE Solar, since only available from 2022
     df = df.drop(columns=[('SE', 'Solar')])
     valid_start_dt = df[('SE', 'Wind Onshore')].first_valid_index()
     end_dt = df.index[-1]
     df = df[df.index >= valid_start_dt]
+
+    # Combine offshore and onshore wind to lessen the number of features
+    df[('DK1', 'Wind')] = df[('DK1', 'Wind Onshore')] + df[('DK1', 'Wind Offshore')]
+    df[('DK2', 'Wind')] = df[('DK2', 'Wind Onshore')] + df[('DK2', 'Wind Offshore')]
+    df[('NO', 'Wind')] = df[('NO', 'Wind Onshore')] + df[('NO', 'Wind Offshore')]
+    df[('DE', 'Wind')] = df[('DE', 'Wind Onshore')] + df[('DE', 'Wind Offshore')]
+    df[('SE', 'Wind')] = df[('SE', 'Wind Onshore')]
+    df = df.drop(columns=[('DK1', 'Wind Onshore'), ('DK1', 'Wind Offshore'),
+                            ('DK2', 'Wind Onshore'), ('DK2', 'Wind Offshore'),
+                            ('NO', 'Wind Onshore'), ('NO', 'Wind Offshore'),
+                            ('DE', 'Wind Onshore'), ('DE', 'Wind Offshore'),
+                            ('SE', 'Wind Onshore')])
+
+
 
     # make linear interpolation of missing values
     df = df.interpolate(method='linear', axis=0)
@@ -49,8 +63,12 @@ def create_dataset(target_col='DK1_price'):
     # Get average price for countries with multiple zones
     #price_df['Denmark'] = price_df[['Denmark_Denmark_East', 'Denmark_Denmark_West']].mean(axis=1)
     price_df['SE_price'] = price_df[['SE1_Lulea_price', 'SE2_Sundsvall_price', 'SE3_Stockholm_price', 'SE4_Malmo_price']].mean(axis=1)
-    price_df['NO_price'] = price_df[['Bergen_price', 'Kristiansand_price', 'Oslo_price', 'Tromso_price', 'Trondheim_price']].mean(axis=1)
-
+    price_df['NO_price'] = price_df[['Bergen_price', 'Kristiansand_price', 'Oslo_price', 'Tromso_price',
+                                     'Trondheim_price', 'Kristiansund_price']].mean(axis=1)
+    # drop the old columns
+    price_df = price_df.drop(columns=['SE1_Lulea_price', 'SE2_Sundsvall_price', 'SE3_Stockholm_price', 'SE4_Malmo_price',
+                                        'Bergen_price', 'Kristiansand_price', 'Oslo_price', 'Tromso_price',
+                                      'Trondheim_price', 'Kristiansund_price', 'System_price'])
     # rename west denmark to DK1 and east denmark to DK2
     price_df = price_df.rename(columns={'Denmark_East_price': 'DK2_price', 'Denmark_West_price': 'DK1_price'})
     # join price_df and df
@@ -77,10 +95,10 @@ def create_dataset(target_col='DK1_price'):
 
     df = pd.merge(df, price_df, left_index=True, right_index=True)
     # make temporal dummy features
-    df['hour'] = df.index.hour
-    df['day_of_week'] = df.index.dayofweek
-    df['month'] = df.index.month
-    df['year'] = df.index.year
+    #df['hour'] = df.index.hour
+    #df['day_of_week'] = df.index.dayofweek
+    #df['month'] = df.index.month        # SKAL SELV TAGE HØJDE FOR DETTE HVIS VI IKKE BRUGER EPFtoolbox
+    #df['year'] = df.index.year
 
     # make lagged features
     lagged_features = {}
@@ -97,6 +115,20 @@ def create_dataset(target_col='DK1_price'):
 
 
     df = pd.concat([df, pd.DataFrame(lagged_features, index=df.index)], axis=1)
+    df['day_of_week'] = df.index.dayofweek
+
+    # to dummies
+    # day_of_week_0 column when day_of_week is 0, i.e. monday. 1 if monday, 0 otherwise
+    df['day_of_week_0'] = df['day_of_week'].apply(lambda x: 1 if x == 0 else 0)
+    df = pd.get_dummies(df, columns=['day_of_week'], drop_first=True) # last one should not be there, but we still use it?
+
+    # drop columns with max = min = 0
+    invalid_cols = [col for col in df.columns if df[col].max() == df[col].min()]
+    print(invalid_cols)
+
+    #df.index = df.index.tz_localize('UTC')
+
+    df = df.drop(columns=invalid_cols)
     df = df.dropna()
     df = df.sort_index()
 
