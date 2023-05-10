@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import plotly.io as pio
 import streamlit as st
+from sklearn.metrics import mean_absolute_error
 
 st.set_page_config(page_title="Result Plots", page_icon="📈")
 
@@ -35,10 +36,14 @@ actuals_melt.drop('hour', axis=1, inplace=True)
 # merge dataframes
 df = pd.merge(lear_predictions_melt, actuals_melt, on=['index'], how='left')
 df = df.sort_values(by=['index'])
-
+df['error'] = abs(df['actuals'] - df['lear'])
 # make time series plot of actuals vs predictions on streamlit
+
 st.write("## Actuals vs Predictions")
-# divide into 8 plots one for each quarter both years
+col1, col2 = st.columns(2)
+# divide into 8 plots one for each quarter both years, do this inside collapseable expander
+
+
 for i in range(8):
     # make figure
     fig = go.Figure()
@@ -47,9 +52,18 @@ for i in range(8):
     if i >= 4:
         year = 2022
     tmp_df = df[(df['index'].dt.quarter == (i % 4) + 1) & (df['index'].dt.year == year)]
-    fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['actuals'], name='Actuals'))
-    fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['lear'], name='Predictions'))
-    # add layout
-    fig.update_layout(title=f"Quarter {i + 1}", xaxis_title="Date", yaxis_title="MWh")
-    # add figure to streamlit
-    st.plotly_chart(fig, use_container_width=True)
+    with col1:
+        fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['actuals'], name='Actuals'))
+        fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['lear'], name='Predictions'))
+        # add layout
+        fig.update_layout(title=f"Year {year} Quarter {(i % 4) + 1}", xaxis_title="Date", yaxis_title="€/MWh")
+        # add figure to streamlit
+        with st.expander(f"Year {year} Quarter {i + 1}"):
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        # plot MAE for each quarter
+        fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['error'], name='Absolute Error'))
+        fig.update_layout(title=f"Year {year} Quarter {i + 1}", xaxis_title="Date", yaxis_title="€/MWh")
+        with st.expander(f"Year {year} Quarter {i + 1}"):
+            st.plotly_chart(fig, use_container_width=True)
