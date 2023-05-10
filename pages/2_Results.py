@@ -46,7 +46,7 @@ for i in range(8):
     year = 2021
     if i >= 4:
         year = 2022
-    tmp_df = df[(df['index'].dt.quarter == (i + 1) % 4) & (df['index'].dt.year == year)]
+    tmp_df = df[(df['index'].dt.quarter == (i + 1) % 5) & (df['index'].dt.year == year)]
     fig.add_trace(go.Scatter(x=tmp_df.index, y=tmp_df['actuals'], name='Actuals'))
     fig.add_trace(go.Scatter(x=tmp_df.index, y=tmp_df['lear'], name='Predictions'))
     # add layout
