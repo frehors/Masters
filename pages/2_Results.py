@@ -18,6 +18,7 @@ actuals.columns = [i for i in range(24)]
 # melt data, each column is an hour of the day and index is the date
 lear_predictions_melt = pd.melt(lear_predictions.reset_index(), id_vars='index', var_name='hour', value_name='lear')
 # actuals id_vars is index value 2
+lear_predictions_melt['lear'] = pd.to_numeric(lear_predictions_melt['lear'])
 actuals_melt = pd.melt(actuals.reset_index(), id_vars='index', var_name='hour', value_name='actuals')
 # remove h from the hour column
 lear_predictions_melt['hour'] = lear_predictions_melt['hour'].str.replace('h', '')
