@@ -43,7 +43,7 @@ for i in range(8):
     # make figure
     fig = go.Figure()
     # add traces
-    tmp_df = df.loc[df.index.quarter == i + 1]
+    tmp_df = df[df['index'].dt.quarter == i + 1]
     fig.add_trace(go.Scatter(x=tmp_df.index, y=tmp_df['actuals'], name='Actuals'))
     fig.add_trace(go.Scatter(x=tmp_df.index, y=tmp_df['lear'], name='Predictions'))
     # add layout
