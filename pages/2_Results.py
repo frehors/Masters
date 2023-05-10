@@ -40,7 +40,7 @@ df['error'] = abs(df['actuals'] - df['lear'])
 # make time series plot of actuals vs predictions on streamlit
 
 st.write("## Actuals vs Predictions")
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([3, 3])
 # divide into 8 plots one for each quarter both years, do this inside collapseable expander
 
 
