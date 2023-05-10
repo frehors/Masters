@@ -34,7 +34,7 @@ actuals_melt.drop('hour', axis=1, inplace=True)
 
 # merge dataframes
 df = pd.merge(lear_predictions_melt, actuals_melt, on=['index'], how='left')
-df = df.sort_index()
+df = df.sort_values(by=['index'])
 
 # make time series plot of actuals vs predictions on streamlit
 st.write("## Actuals vs Predictions")
