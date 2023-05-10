@@ -46,24 +46,26 @@ col1, col2 = st.columns(2)
 
 for i in range(8):
     # make figure
-    fig = go.Figure()
+
     # add traces
     year = 2021
     if i >= 4:
         year = 2022
     tmp_df = df[(df['index'].dt.quarter == (i % 4) + 1) & (df['index'].dt.year == year)]
     with col1:
+        fig = go.Figure()
         fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['actuals'], name='Actuals'))
         fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['lear'], name='Predictions'))
         # add layout
         fig.update_layout(title=f"Year {year} Quarter {(i % 4) + 1}", xaxis_title="Date", yaxis_title="€/MWh")
         # add figure to streamlit
-        with st.expander(f"Year {year} Quarter {i + 1}"):
-            st.plotly_chart(fig, use_container_width=True)
+        #with st.expander(f"Year {year} Quarter {i + 1}"):
+        st.plotly_chart(fig, use_container_width=True)
 
     with col2:
         # plot MAE for each quarter
+        fig = go.Figure()
         fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['error'], name='Absolute Error'))
         fig.update_layout(title=f"Year {year} Quarter {i + 1}", xaxis_title="Date", yaxis_title="€/MWh")
-        with st.expander(f"Year {year} Quarter {i + 1}"):
-            st.plotly_chart(fig, use_container_width=True)
+        #with st.expander(f"Year {year} Quarter {i + 1}"):
+        st.plotly_chart(fig, use_container_width=True)
