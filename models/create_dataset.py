@@ -19,8 +19,7 @@ def create_dataset(target_col='DK1_price'):
     df = df[df.index >= valid_start_dt]
 
     # Combine offshore and onshore wind to lessen the number of features
-    df[('DK1', 'Wind')] = df[('DK1', 'Wind Onshore')] + df[('DK1', 'Wind Offshore')]
-    df[('DK2', 'Wind')] = df[('DK2', 'Wind Onshore')] + df[('DK2', 'Wind Offshore')]
+    df[('DK', 'Wind')] = df[('DK1', 'Wind Onshore')] + df[('DK1', 'Wind Offshore')] + df[('DK2', 'Wind Onshore')] + df[('DK2', 'Wind Offshore')]
     df[('NO', 'Wind')] = df[('NO', 'Wind Onshore')] + df[('NO', 'Wind Offshore')]
     df[('DE', 'Wind')] = df[('DE', 'Wind Onshore')] + df[('DE', 'Wind Offshore')]
     df[('SE', 'Wind')] = df[('SE', 'Wind Onshore')]
@@ -42,17 +41,19 @@ def create_dataset(target_col='DK1_price'):
 
     tmp = pd.read_pickle(os.path.join(price_path, 'Denmark_Denmark_East.pkl'))
 
-    price_areas = ['Denmark_Denmark_East.pkl', 'Denmark_Denmark_West.pkl', 'System.pkl',
-                   'Sweden_SE1_Lulea.pkl', 'Sweden_SE2_Sundsvall.pkl', 'Sweden_SE3_Stockholm.pkl',
-                   'Sweden_SE4_Malmo.pkl',
-                   'Norway_Bergen.pkl', 'Norway_Kristiansand.pkl', 'Norway_Oslo.pkl', 'Norway_Tromso.pkl',
-                   'Norway_Trondheim.pkl', 'Norway_Kristiansand.pkl']
+    # price_areas = ['Denmark_Denmark_East.pkl', 'Denmark_Denmark_West.pkl', 'System.pkl',
+    #                'Sweden_SE1_Lulea.pkl', 'Sweden_SE2_Sundsvall.pkl', 'Sweden_SE3_Stockholm.pkl',
+    #                'Sweden_SE4_Malmo.pkl',
+    #                'Norway_Bergen.pkl', 'Norway_Kristiansand.pkl', 'Norway_Oslo.pkl', 'Norway_Tromso.pkl',
+    #                'Norway_Trondheim.pkl', 'Norway_Kristiansand.pkl']
+
+    price_areas = ['Denmark_Denmark_West.pkl']
 
 
     price_df = pd.DataFrame()
     for file in os.listdir(price_path):
 
-        if file.endswith('.pkl'): #and file in price_areas:
+        if file.endswith('.pkl') and file in price_areas:
             tmp_price_df = pd.read_pickle(os.path.join(price_path, file))
             tmp_price_df = tmp_price_df[tmp_price_df.index >= valid_start_dt.strftime(format='%Y-%m-%d %H:%M:%S')]
             tmp_price_df = tmp_price_df[tmp_price_df.index <= end_dt.strftime(format='%Y-%m-%d %H:%M:%S')]
@@ -60,15 +61,24 @@ def create_dataset(target_col='DK1_price'):
     price_df = price_df[~price_df.index.duplicated(keep='first')]
     price_df.index = price_df.index.tz_localize(None)
     price_df = price_df.sort_index()
+
+    ## COMMENTED OUT OTHER COUNTRIES FOR NOW
     # Get average price for countries with multiple zones
-    #price_df['Denmark'] = price_df[['Denmark_Denmark_East', 'Denmark_Denmark_West']].mean(axis=1)
-    price_df['SE_price'] = price_df[['SE1_Lulea_price', 'SE2_Sundsvall_price', 'SE3_Stockholm_price', 'SE4_Malmo_price']].mean(axis=1)
-    price_df['NO_price'] = price_df[['Bergen_price', 'Kristiansand_price', 'Oslo_price', 'Tromso_price',
-                                     'Trondheim_price', 'Kristiansund_price']].mean(axis=1)
-    # drop the old columns
-    price_df = price_df.drop(columns=['SE1_Lulea_price', 'SE2_Sundsvall_price', 'SE3_Stockholm_price', 'SE4_Malmo_price',
-                                        'Bergen_price', 'Kristiansand_price', 'Oslo_price', 'Tromso_price',
-                                      'Trondheim_price', 'Kristiansund_price', 'System_price'])
+    ##price_df['Denmark'] = price_df[['Denmark_Denmark_East', 'Denmark_Denmark_West']].mean(axis=1)
+
+
+
+    # price_df['SE_price'] = price_df[['SE1_Lulea_price', 'SE2_Sundsvall_price', 'SE3_Stockholm_price', 'SE4_Malmo_price']].mean(axis=1)
+    # price_df['NO_price'] = price_df[['Bergen_price', 'Kristiansand_price', 'Oslo_price', 'Tromso_price',
+    #                                  'Trondheim_price', 'Kristiansund_price']].mean(axis=1)
+    # # drop the old columns
+    # price_df = price_df.drop(columns=['SE1_Lulea_price', 'SE2_Sundsvall_price', 'SE3_Stockholm_price', 'SE4_Malmo_price',
+    #                                     'Bergen_price', 'Kristiansand_price', 'Oslo_price', 'Tromso_price',
+    #                                   'Trondheim_price', 'Kristiansund_price', 'System_price'])
+
+    ############################
+
+
     # rename west denmark to DK1 and east denmark to DK2
     price_df = price_df.rename(columns={'Denmark_East_price': 'DK2_price', 'Denmark_West_price': 'DK1_price'})
     # join price_df and df
@@ -110,7 +120,8 @@ def create_dataset(target_col='DK1_price'):
                 lagged_features['{}_lag_{}'.format(col, i)] = df[col].shift(i*24)
 
     # drop non lagged prices, as these are not available in real time, but keep target_col
-    price_cols = ['DK1_price', 'DK2_price', 'SE_price', 'NO_price', 'DE_price']
+    #price_cols = ['DK1_price', 'DK2_price', 'SE_price', 'NO_price', 'DE_price']
+    price_cols = ['DK1_price']
     df = df.drop(columns=[col for col in price_cols if col != target_col])
 
 
