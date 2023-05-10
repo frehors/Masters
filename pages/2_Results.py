@@ -38,19 +38,15 @@ df = df.sort_index()
 
 # make time series plot of actuals vs predictions on streamlit
 st.write("## Actuals vs Predictions")
-fig = px.line(df, x='index', y=['lear', 'actuals'], title='Actuals vs Predictions')
-fig.update_layout(
-    xaxis_title="Date",
-    yaxis_title="MWh",
-    legend_title="Legend Title",
-    font=dict(
-        family="Courier New, monospace",
-        size=18,
-        color="RebeccaPurple"
-    )
-)
-st.plotly_chart(fig)
-
-
-
-
+# divide into 8 plots one for each quarter both years
+for i in range(8):
+    # make figure
+    fig = go.Figure()
+    # add traces
+    tmp_df = df.loc[df.index.quarter == i + 1]
+    fig.add_trace(go.Scatter(x=tmp_df.index, y=tmp_df['actuals'], name='Actuals'))
+    fig.add_trace(go.Scatter(x=tmp_df.index, y=tmp_df['lear'], name='Predictions'))
+    # add layout
+    fig.update_layout(title=f"Quarter {i + 1}", xaxis_title="Date", yaxis_title="MWh")
+    # add figure to streamlit
+    st.plotly_chart(fig, use_container_width=True)
