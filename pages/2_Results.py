@@ -47,8 +47,8 @@ for i in range(8):
     if i >= 4:
         year = 2022
     tmp_df = df[(df['index'].dt.quarter == (i % 4) + 1) & (df['index'].dt.year == year)]
-    fig.add_trace(go.Scatter(x=tmp_df.index, y=tmp_df['actuals'], name='Actuals'))
-    fig.add_trace(go.Scatter(x=tmp_df.index, y=tmp_df['lear'], name='Predictions'))
+    fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['actuals'], name='Actuals'))
+    fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['lear'], name='Predictions'))
     # add layout
     fig.update_layout(title=f"Quarter {i + 1}", xaxis_title="Date", yaxis_title="MWh")
     # add figure to streamlit
