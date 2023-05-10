@@ -40,7 +40,7 @@ df['error'] = abs(df['actuals'] - df['lear'])
 # make time series plot of actuals vs predictions on streamlit
 
 st.write("## Actuals vs Predictions")
-col1, col2 = st.columns([4, 1])
+#col1, col2 = st.columns([4, 1])
 
 # monthly basis
 for i in range(2 * 12):
@@ -51,18 +51,20 @@ for i in range(2 * 12):
     if i >= 4:
         year = 2022
     tmp_df = df[(df['index'].dt.month == (i % 12) + 1) & (df['index'].dt.year == year)]
-    with col1:
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['actuals'], name='Actuals'))
-        fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['lear'], name='Predictions'))
-        # add layout
-        fig.update_layout(title=f"Year {year} Month {(i % 4) + 1}", xaxis_title="Date", yaxis_title="€/MWh")
-        # add figure to streamlit
-        #with st.expander(f"Year {year} Quarter {i + 1}"):
-        st.plotly_chart(fig, use_container_width=True)
-    with col2:
-        # print the mean absolute error for the month
-        st.write(f"MAE: {mean_absolute_error(tmp_df['actuals'], tmp_df['lear'])}")
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['actuals'], name='Actuals'))
+    fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['lear'], name='Predictions'))
+    # add layout
+    fig.update_layout(title=f"Year {year} Month {(i % 4) + 1}", xaxis_title="Date", yaxis_title="€/MWh")
+    # write the MAE for the month on the figure
+    fig.add_annotation(x=0.5, y=0.9, xref="paper", yref="paper",
+                          text=f"MAE: {round(mean_absolute_error(tmp_df['actuals'], tmp_df['lear']), 2)}",
+                            showarrow=False)
+    # add figure to streamlit
+    #with st.expander(f"Year {year} Quarter {i + 1}"):
+    st.plotly_chart(fig, use_container_width=True)
+
     # with col2:
     #     # plot MAE for each quarter
     #     fig = go.Figure()
