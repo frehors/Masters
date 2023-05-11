@@ -34,7 +34,7 @@ dnn_predictions_melt = dnn_predictions_melt.sort_values(by=['index'])
 
 df = pd.merge(dnn_predictions_melt, actuals_melt, on=['index'], how='left')
 df = df.sort_values(by=['index'])
-df['error'] = abs(df['actuals'] - df['lear'])
+df['error'] = abs(df['actuals'] - df['dnn'])
 # make time series plot of actuals vs predictions on streamlit
 
 st.write("## Actuals vs Predictions - DNN")
@@ -52,12 +52,12 @@ for i in range(2 * 12):
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['actuals'], name='Actuals'))
-    fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['lear'], name='Predictions'))
+    fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['dnn'], name='Predictions'))
     # add layout
     fig.update_layout(title=f"Year {year} Month {(i % 4) + 1}", xaxis_title="Date", yaxis_title="€/MWh")
     # write the MAE for the month on the figure
     fig.add_annotation(x=0.5, y=0.9, xref="paper", yref="paper",
-                          text=f"MAE: {round(mean_absolute_error(tmp_df['actuals'], tmp_df['lear']), 2)}",
+                          text=f"MAE: {round(mean_absolute_error(tmp_df['actuals'], tmp_df['dnn']), 2)}",
                             showarrow=False)
     # add figure to streamlit
     #with st.expander(f"Year {year} Quarter {i + 1}"):
