@@ -48,7 +48,7 @@ for i in range(2 * 12):
     year = 2021
     month = pd.to_datetime((i % 12) + 1, format='%m').month_name()
 
-    if i >= 4:
+    if i >= 12:
         year = 2022
     tmp_df = df[(df['index'].dt.month == (i % 12) + 1) & (df['index'].dt.year == year)]
 
