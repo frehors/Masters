@@ -48,6 +48,8 @@ for i in range(2 * 12):
 
     # add traces
     year = 2021
+    month = pd.to_datetime((i % 12) + 1, format='%m').month_name()
+
     if i >= 4:
         year = 2022
     tmp_df = df[(df['index'].dt.month == (i % 12) + 1) & (df['index'].dt.year == year)]
@@ -56,7 +58,7 @@ for i in range(2 * 12):
     fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['actuals'], name='Actuals'))
     fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['lear'], name='Predictions'))
     # add layout
-    fig.update_layout(title=f"Year {year} Month {(i % 4) + 1}", xaxis_title="Date", yaxis_title="€/MWh")
+    fig.update_layout(title=f"Year {year} Month {month}", xaxis_title="Date", yaxis_title="€/MWh")
     # write the MAE for the month on the figure
     fig.add_annotation(x=0.5, y=0.9, xref="paper", yref="paper",
                           text=f"MAE: {round(mean_absolute_error(tmp_df['actuals'], tmp_df['lear']), 2)}",
