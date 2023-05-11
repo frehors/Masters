@@ -58,7 +58,7 @@ for i in range(2 * 12):
     fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['actuals'], name='Actuals'))
     fig.add_trace(go.Scatter(x=tmp_df['index'], y=tmp_df['lear'], name='Predictions'))
     # add layout
-    fig.update_layout(title=f"Year {year} Month {month}", xaxis_title="Date", yaxis_title="€/MWh")
+    fig.update_layout(title=f"{year} {month}", xaxis_title="Date", yaxis_title="€/MWh")
     # write the MAE for the month on the figure
     fig.add_annotation(x=0.5, y=0.9, xref="paper", yref="paper",
                           text=f"MAE: {round(mean_absolute_error(tmp_df['actuals'], tmp_df['lear']), 2)}",
