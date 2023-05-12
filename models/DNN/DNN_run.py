@@ -489,7 +489,12 @@ actuals_path = os.path.join(os.getcwd(), 'predictions', f'DNN4_actuals_all.pkl')
 pickle.dump(y_test, open(actuals_path, 'wb'))
 
 # also save to app
+
+
+# read predictions
+
 os.chdir('..')
 os.chdir('..')
 os.chdir('results_app')
-predictions_path = os.path.join(os.getcwd(), 'predictions', f'dnn4_preds_all.pkl')
+predictions_path = os.path.join(os.getcwd(), f'dnn4_preds_all.pkl')
+pickle.dump(predictions, open(predictions_path, 'wb'))
