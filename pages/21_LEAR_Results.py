@@ -40,7 +40,7 @@ df['error'] = abs(df['actuals'] - df['lear'])
 # make time series plot of actuals vs predictions on streamlit
 
 st.write("## Actuals vs Predictions - LEAR")
-st.write("### Mean Absolute Error: " + str(round(mean_absolute_error(df['actuals'], df['lear']), 2)))
+st.write("### Mean Absolute Error: ", round(mean_absolute_error(df['actuals'], df['lear']), 2))
 #col1, col2 = st.columns([4, 1])
 
 # monthly basis
