@@ -8,15 +8,16 @@ import os
 import json
 import torch
 import torch.nn as nn
+from torch.utils.data import TensorDataset
+from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 import hyperopt
 import pickle
-import time
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-                    , handlers=[logging.FileHandler('DNN.log'), logging.StreamHandler()])
+                    , handlers=[logging.FileHandler('LSTM_run.log'), logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -38,19 +39,8 @@ X = X.loc[:, (X != 0).any(axis=0)]
 # and some are 0 almost always, drop features with a MAD below threshold
 X = X.loc[:, X.sub(X.median(axis=0), axis=1).abs().median(axis=0) > 0.01]
 
-# save median and mad for inverse transform
-#X_median = X.median(axis=0)
-#X_mad = X.mad(axis=0)
 
-
-#X.sub(median, axis=1)
-#X.div(mad, axis=1)
-
-#
-
-# Invariant asinh transform of data
-# first Subtract median and then divide by median absolute deviation
-class Scaler():
+class Scaler:
 
     def __init__(self, median=None, mad=None):
         self.median = None
@@ -94,7 +84,6 @@ class Scaler():
         return X_inversed
 
 
-
 #X = transform(X)
 X.index = pd.to_datetime(X.index)
 X['day_of_week'] = X.index.dayofweek
@@ -105,7 +94,6 @@ X['day_of_week_0'] = X['day_of_week'].apply(lambda x: 1 if x == 0 else 0)
 X = pd.get_dummies(X, columns=['day_of_week'], drop_first=True) # last one should not be there, but we still use it?
 
 # Drop Nan rows ( should be only first because im running UTC and thus the first "day" doesn't have 24 hrs)
-X.isna().sum().sum()
 
 # now y
 # make y to dataframe first, should alreadt be, but just to be sure
@@ -116,59 +104,52 @@ y.index = pd.to_datetime(y.index)
 
 y = y.dropna()
 
-##### temporary start cut off as well to see if it works
-#start_cutoff = pd.to_datetime('2019-01-01 00:00')
+
 val_cutoff = pd.to_datetime('2020-07-01')
 test_cutoff = pd.to_datetime('2021-01-01')
-#X_train = X.loc[X.index >= start_cutoff & X.index < val_cutoff]
 X_train = X.loc[X.index < val_cutoff]
 X_val = X.loc[(X.index >= val_cutoff) & (X.index < test_cutoff)]
 X_test = X.loc[X.index >= test_cutoff]
-#y_train = y.loc[y.index < val_cutoff & y.index >= start_cutoff]
 y_train = y.loc[y.index < val_cutoff]
 y_val = y.loc[(y.index >= val_cutoff) & (y.index < test_cutoff)]
 y_test = y.loc[y.index >= test_cutoff]
-#X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
-#X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, shuffle=False)
 
 
-
-
-class DNN4(nn.Module):
-    def __init__(self, input_dim, output_dim, num_neurons, dropout_rate):
-        # assure lenght of num_neurons is 3
-        assert len(num_neurons) == 3
-
-        super(DNN4, self).__init__()
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.fc1 = nn.Linear(self.input_dim, num_neurons[0])
-        self.fc2 = nn.Linear(num_neurons[0], num_neurons[1])
-        self.fc3 = nn.Linear(num_neurons[1], num_neurons[2])
-        self.fc4 = nn.Linear(num_neurons[2], self.output_dim)
-        self.dropout = nn.Dropout(dropout_rate)
-        self.relu = nn.ReLU()
+class LSTM(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, output_size, dropout=0):
+        super(LSTM, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, dropout=dropout, bidirectional=False)
+        self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
-        x = self.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.relu(self.fc2(x))
-        x = self.dropout(x)
-        x = self.relu(self.fc3(x))
-        x = self.dropout(x)
-        x = self.fc4(x)
-        return x
+        batch_size = x.size(0)
+        h0 = torch.zeros(self.num_layers, batch_size, self.hidden_size).requires_grad_().to(device)
+        c0 = torch.zeros(self.num_layers, batch_size, self.hidden_size).requires_grad_().to(device)
+        out, (hn, cn) = self.lstm(x, (h0, c0))
 
-# make dataloader
-# and small test to see if it works, it does :)
-# train_loader = DataLoader(dataset=list(zip(X_train.values, y_train.values)), batch_size=32, shuffle=False)
-# val_loader = DataLoader(dataset=list(zip(X_val.values, y_val.values)), batch_size=32, shuffle=False)
-#X.head()
+        out = self.fc(out[:, -1, :])
+        return out
+
+def create_sequences(X, y, sequence_length):
+    X_sequences = []
+    y_sequences = []
+    for i in range(len(X) - sequence_length):
+        X_sequences.append(X[i:i+sequence_length])
+        y_sequences.append(y[i+sequence_length])
+    X_sequences = np.array(X_sequences)
+    y_sequences = np.array(y_sequences)
+    X_sequences = torch.tensor(X_sequences).float()
+    y_sequences = torch.tensor(y_sequences).float()
+    return X_sequences, y_sequences
 
 # Tree structured parzen estimator
-
 optimize_hyperparameters = False
-batch_sizes = [2, 4, 8, 16, 32, 64, 128, 256, 512]
+
+batch_size = [2, 4, 8, 16, 32, 64, 128, 256]
+num_layers = [1, 2, 3, 4, 5]
+seq_length = [1, 2, 3, 4, 6, 8, 12, 24]
 if optimize_hyperparameters:
     from hyperopt import fmin, tpe, hp, Trials
 
@@ -178,11 +159,11 @@ if optimize_hyperparameters:
     # Define the search space
     space = {
         'weight_decay': hp.loguniform('weight_decay', -10, -1),
-        'batch_size': hp.choice('batch_size', batch_sizes),
+        'num_layers': hp.choice('num_layers', num_layers),
+        'sequence_length': hp.choice('sequence_length', seq_length), # 1-24 hours
+        'batch_size': hp.choice('batch_size', batch_size),
         'learning_rate': hp.loguniform('learning_rate', -8, -1),
-        'num_neurons_1': hp.quniform('num_neurons_1', 32, 512, 32),
-        'num_neurons_2': hp.quniform('num_neurons_2', 32, 512, 32),
-        'num_neurons_3': hp.quniform('num_neurons_3', 32, 512, 32),
+        'hidden_size': hp.quniform('hidden_size', 32, 512, 32),
         'dropout_rate': hp.uniform('dropout_rate', 0, 0.5)
     }
 
@@ -190,13 +171,18 @@ if optimize_hyperparameters:
     def objective(params, input_dim=X_train.shape[1], output_dim=24):
         # Train and evaluate your model with the given hyperparameters
         # Return the validation accuracy or other metric you want to optimize
-        params['num_neurons_1'] = int(params['num_neurons_1'])
-        params['num_neurons_2'] = int(params['num_neurons_2'])
-        params['num_neurons_3'] = int(params['num_neurons_3'])
-        model = DNN4(input_dim, output_dim, [params['num_neurons_1'], params['num_neurons_2'], params['num_neurons_3']], params['dropout_rate']).to(device)
+
+        params['batch_size'] = int(params['batch_size'])
+        params['hidden_size'] = int(params['hidden_size'])
+        params['num_layers'] = int(params['num_layers'])
+        params['sequence_length'] = int(params['sequence_length'])
+        if params['num_layers'] == 1:  # if only one layer, no dropout as this occurs between layers
+            params['dropout_rate'] = 0
+
+        model = LSTM(input_size=input_dim, hidden_size=params['hidden_size'], num_layers=params['num_layers'], output_size=output_dim, dropout=params['dropout_rate']).to(device)
+
         optimizer = optim.Adam(model.parameters(), lr=params['learning_rate'], weight_decay=params['weight_decay'])
-        # print layers
-        # __loader__
+
         # fit scaler first, then transform: Fitting on training data then transforming on training and validation data
 
         XScaler = Scaler()
@@ -216,10 +202,18 @@ if optimize_hyperparameters:
         y_val_scaled = yScaler.transform(y_val)
         #train_dataset = Dataset()
         #train_dataset.load_data(X_train_scaled, y_train_scaled)
-        train_loader = DataLoader(dataset=list(zip(X_train_scaled.values, y_train_scaled.values)), batch_size=params['batch_size'], shuffle=False)
+        #train_loader = DataLoader(dataset=list(zip(X_train_scaled.values, y_train_scaled.values)), batch_size=params['batch_size'], shuffle=False)
+        # make torch dataset
+        X_train_sequences, y_train_sequences = create_sequences(X_train_scaled.values, y_train_scaled.values, params['sequence_length'])
+        X_val_sequences, y_val_sequences = create_sequences(X_val_scaled.values, y_val_scaled.values, params['sequence_length'])
+        train_dataset = TensorDataset(X_train_sequences, y_train_sequences)
+        val_dataset = TensorDataset(X_val_sequences, y_val_sequences)
+        train_loader = DataLoader(train_dataset, batch_size=params['batch_size'], shuffle=False)
+        val_loader = DataLoader(val_dataset, batch_size=params['batch_size'], shuffle=False)
 
 
-        val_loader = DataLoader(dataset=list(zip(X_val_scaled.values, y_val_scaled.values)), batch_size=params['batch_size'], shuffle=False)
+
+
         train_losses = []
         val_losses = []
         best_val_loss = np.inf
@@ -271,20 +265,20 @@ if optimize_hyperparameters:
     tpe_algorithm = tpe.suggest
 
     # Define the number of iterations
-    max_evals = 1500
+    max_evals = 1000
 
     # Initialize the trials object
     trials = Trials()
 
     # Run the TPE algorithm to optimize the hyperparameters
     best_params = fmin(objective, space, algo=tpe_algorithm, max_evals=max_evals, trials=trials, verbose=True)
-    best_params['batch_size'] = batch_sizes[best_params['batch_size']]
+
     # Print the best hyperparameters
     print("Best hyperparameters:", best_params)
-    # save best parameters to json
-    param_path = r'C:\Users\frede\PycharmProjects\Masters\models\DNN\best_params.pkl'
+    # save best parameters to pkl
+    param_path = r'C:\Users\frede\PycharmProjects\Masters\models\LSTM\best_params.pkl'
     pickle.dump(best_params, open(param_path, 'wb'))
-    trials_path = r'C:\Users\frede\PycharmProjects\Masters\models\DNN\trials.pkl'
+    trials_path = r'C:\Users\frede\PycharmProjects\Masters\models\LSTM\trials.pkl'
     pickle.dump(trials, open(trials_path, 'wb'))
 
 
@@ -370,24 +364,23 @@ def build_train_model(model, date_to_forecast, X_training, y_training, X_validat
 input_dim = X_train.shape[1]
 output_dim = 24
 
-best_params['num_neurons_1'] = int(best_params['num_neurons_1'])
-best_params['num_neurons_2'] = int(best_params['num_neurons_2'])
-best_params['num_neurons_3'] = int(best_params['num_neurons_3'])
-best_params['batch_size'] = int(best_params['batch_size'])
 
-model = DNN4(input_dim,
-             output_dim,
-             [best_params['num_neurons_1'], best_params['num_neurons_2'], best_params['num_neurons_3']],
-             best_params['dropout_rate']).to(device)
+best_params['batch_size'] = int(best_params['batch_size'])
+best_params['sequence_length'] = int(best_params['sequence_length'])
+best_params['hidden_size'] = int(best_params['hidden_size'])
+best_params['num_layers'] = int(best_params['num_layers'])
+
+
+model = LSTM(input_dim, best_params['hidden_size'], best_params['num_layers'], output_dim, best_params['dropout'], device_name='cpu')
 
 optimizer = optim.Adam(model.parameters(), lr=best_params['learning_rate'], weight_decay=best_params['weight_decay'])
 # loss
 criterion = nn.MSELoss()
 
-epochs = 50
 
 
-# first we train model on all data except last week before testing, then recalibrate afterwards only on last year
+
+# first we train model on all data except last week before testing, then recalibrate afterwards only on 2 last years
 XScaler = Scaler()
 XScaler.fit(X_train.iloc[:, :-7])
 
@@ -409,13 +402,12 @@ model, _, _ = build_train_model(model=model, date_to_forecast=test_cutoff, X_tra
 predictions_path = os.path.join(os.getcwd(), 'predictions', f'DNN4_predictions.pkl')
 predictions = []
 
-calibration_window = pd.Timedelta(days=2 * 365)
+epochs = 50
 
 
 for i, date in enumerate(X_test.index):
-    start_time = time.time()
-    X_train_date = X[(X.index < date - pd.Timedelta(days=7)) & (X.index > date - calibration_window)]
-    y_train_date = y[(y.index < date - pd.Timedelta(days=7)) & (X.index > date - calibration_window)]
+    X_train_date = X[(X.index < date - pd.Timedelta(days=7)) & (X.index > date - pd.Timedelta(days=2 * 365))]
+    y_train_date = y[(y.index < date - pd.Timedelta(days=7)) & (X.index > date - pd.Timedelta(days=2 * 365))]
     X_val_date = X[(X.index >= date - pd.Timedelta(days=7)) & (X.index < date)]
     y_val_date = y[(y.index >= date - pd.Timedelta(days=7)) & (y.index < date)]
     X_test_date = X[X.index == date]
@@ -451,6 +443,7 @@ for i, date in enumerate(X_test.index):
                                                         epochs=epochs,
                                                         device_name=device)
 
+
     # predict and detach to cpu and make into pandas series
     X_test_date_transformed = torch.tensor(X_test_date_transformed.values).float().to(device)
     # disable dropout
@@ -463,9 +456,9 @@ for i, date in enumerate(X_test.index):
     predictions.append(y_pred)
 
     logger.info(f'Training model for date {date} ({i+1}/{len(X_test.index)}): MAE: {mean_absolute_error(y_true, y_pred)}')
-    print(date, 'MAE:', round(mean_absolute_error(y_true, y_pred), 2), 'time:', round(time.time() - start_time, 2))
-    #print('predicted mean', round(y_pred.mean().mean(), 2))
-    #print('true mean', round(y_true.mean().mean(), 2))
+    print(date, 'MAE:', round(mean_absolute_error(y_true, y_pred), 2))
+    print('predicted mean', round(y_pred.mean().mean(), 2))
+    print('true mean', round(y_true.mean().mean(), 2))
 
     # every quarter, save model and losses and predictions
     if date.month % 3 == 0 and date.day == 1:
@@ -488,8 +481,3 @@ pickle.dump(predictions, open(predictions_path, 'wb'))
 actuals_path = os.path.join(os.getcwd(), 'predictions', f'DNN4_actuals_all.pkl')
 pickle.dump(y_test, open(actuals_path, 'wb'))
 
-# also save to app
-os.chdir('..')
-os.chdir('..')
-os.chdir('results_app')
-predictions_path = os.path.join(os.getcwd(), 'predictions', f'dnn4_preds_all.pkl')

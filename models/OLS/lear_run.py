@@ -79,7 +79,7 @@ y_test = y.loc[y.index >= test_cutoff]
 #pd.to_datetime('2021-01-01 00:00')
 #%%
 # fit Lear model
-calibration_window = 364 * 2  # 2 years
+calibration_window = 365 * 2  # 2 years
 #day_range = pd.date_range(start=test_cutoff, end=y.index[-1], freq='D')
 day_range = pd.date_range(start=pd.to_datetime('2021-08-01'), end=pd.to_datetime('2021-12-31'), freq='D')
 #preds = pd.DataFrame(index=y_test.index, columns=['pred'])
