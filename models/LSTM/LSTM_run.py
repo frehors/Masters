@@ -15,6 +15,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 import hyperopt
 import pickle
+import time
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
                     , handlers=[logging.FileHandler('LSTM_run.log'), logging.StreamHandler()])
@@ -49,9 +50,9 @@ class Scaler:
     def fit(self, data):
         if isinstance(data, pd.Series):
             data = pd.DataFrame(data)
-        self.median = data.median(axis=0).to_numpy()
+        self.median = data.median(axis=0).to_numpy().reshape(1, len(data.columns))
         # calculate median absolute deviation
-        self.mad = data.sub(data.median(axis=0), axis=1).abs().median(axis=0).to_numpy()
+        self.mad = data.sub(data.median(axis=0), axis=1).abs().median(axis=0).to_numpy().reshape(1, len(data.columns))
         # print na in mad
         return self
 
@@ -114,7 +115,6 @@ y_train = y.loc[y.index < val_cutoff]
 y_val = y.loc[(y.index >= val_cutoff) & (y.index < test_cutoff)]
 y_test = y.loc[y.index >= test_cutoff]
 
-
 class LSTM(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size, dropout=0):
         super(LSTM, self).__init__()
@@ -132,23 +132,76 @@ class LSTM(nn.Module):
         out = self.fc(out[:, -1, :])
         return out
 
-def create_sequences(X, y, sequence_length):
+def create_sequences(X, sequence_length):
     X_sequences = []
-    y_sequences = []
     for i in range(len(X) - sequence_length):
         X_sequences.append(X[i:i+sequence_length])
-        y_sequences.append(y[i+sequence_length])
     X_sequences = np.array(X_sequences)
-    y_sequences = np.array(y_sequences)
     X_sequences = torch.tensor(X_sequences).float()
-    y_sequences = torch.tensor(y_sequences).float()
-    return X_sequences, y_sequences
+    # swap dim 1 and 2
+
+
+    return X_sequences
+
+
+def train_val_test_sequences(train_date_from, val_cutoff, test_cutoff, seq_length, batch_size):
+    # Scale data according to training data
+    # sequence for all data.
+    # output only index between data_date_from and data_date_to
+    # The dates are inclusive
+    func_time = time.time()
+    XScaler = Scaler()
+    X_local = X.copy()
+    y_local = y.copy()
+    X_train = X_local[(X_local.index >= train_date_from) & (X_local.index < val_cutoff)]
+    XScaler.fit(X_train.iloc[:, :-7])
+    X_scaled = XScaler.transform(X_local.iloc[:, :-7])
+    # add dummies
+    X_scaled = pd.concat([X_scaled, X_local.iloc[:, -7:]], axis=1)
+    yScaler = Scaler()
+    yScaler.fit(y_local[(y_local.index >= train_date_from) & (y_local.index < val_cutoff)])
+    y_scaled = yScaler.transform(y)
+    # create sequences for all data
+    X_seq = create_sequences(X_scaled.values, seq_length)
+    # get index of data to use
+
+    # we need to drop sequence length from the index as we have lost that many rows
+    X_local = X_local.iloc[seq_length:]
+    # if test is iterable do smth
+    val_idx = np.where(X_local.index == val_cutoff)[0][0]
+    test_idx = np.where(X_local.index == test_cutoff)[0][0]
+
+    # split X_seq and y_seq tensors into train, val and test sets
+    X_train_seq = X_seq[:val_idx]
+    y_train_seq = y_scaled.iloc[:val_idx] # slice is not including end, works like range
+    X_val_seq = X_seq[val_idx:test_idx]
+    y_val_seq = y_scaled.iloc[val_idx:test_idx]
+    X_test_seq = X_seq[test_idx] # gets the index of the test date
+    y_test_seq = y_scaled.iloc[test_idx]
+
+    # y to tensor
+    y_train_seq = torch.tensor(y_train_seq.values).float()
+    y_val_seq = torch.tensor(y_val_seq.values).float()
+    y_test_seq = torch.tensor(y_test_seq.values).float()
+
+    # add dim for test as this is only one dim, then we now both have row
+    X_test_seq = X_test_seq.unsqueeze(0)
+    y_test_seq = y_test_seq.unsqueeze(0)
+
+
+
+    train_loader = DataLoader(TensorDataset(X_train_seq, y_train_seq), batch_size=batch_size, shuffle=False)
+    val_loader = DataLoader(TensorDataset(X_val_seq, y_val_seq), batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(TensorDataset(X_test_seq, y_test_seq), batch_size=1, shuffle=False)
+
+    return train_loader, val_loader, test_loader, XScaler, yScaler
 
 # Tree structured parzen estimator
+
 optimize_hyperparameters = False
 
-batch_size = [2, 4, 8, 16, 32, 64, 128, 256]
-num_layers = [1, 2, 3, 4, 5]
+batch_size = [2, 4, 8, 16, 32, 64, 128]
+num_layers = [1, 2, 3, 4]
 seq_length = [1, 2, 3, 4, 6, 8, 12, 24]
 if optimize_hyperparameters:
     from hyperopt import fmin, tpe, hp, Trials
@@ -176,6 +229,7 @@ if optimize_hyperparameters:
         params['hidden_size'] = int(params['hidden_size'])
         params['num_layers'] = int(params['num_layers'])
         params['sequence_length'] = int(params['sequence_length'])
+
         if params['num_layers'] == 1:  # if only one layer, no dropout as this occurs between layers
             params['dropout_rate'] = 0
 
@@ -184,33 +238,18 @@ if optimize_hyperparameters:
         optimizer = optim.Adam(model.parameters(), lr=params['learning_rate'], weight_decay=params['weight_decay'])
 
         # fit scaler first, then transform: Fitting on training data then transforming on training and validation data
+        # sequence length after start date in X index
+        # get index value of 'sequence_length' days after start date
+        train_date_from_hyper = X_train.index[params['sequence_length']]
+        # get first index value of validation data and test data
+        val_date_from_hyper = X_val.index[0]
+        test_date_from_hyper = X_test.index[0]
 
-        XScaler = Scaler()
-        # fit scaler without last 7 features
-        XScaler.fit(X_train.iloc[:, :-7])
-
-
-        X_train_scaled = XScaler.transform(X_train.iloc[:, :-7])
-        # add dummies
-        X_train_scaled = pd.concat([X_train_scaled, X_train.iloc[:, -7:]], axis=1)
-        X_val_scaled = XScaler.transform(X_val.iloc[:, :-7])
-        X_val_scaled = pd.concat([X_val_scaled, X_val.iloc[:, -7:]], axis=1)
-
-        yScaler = Scaler()
-        yScaler.fit(y_train)
-        y_train_scaled = yScaler.transform(y_train)
-        y_val_scaled = yScaler.transform(y_val)
-        #train_dataset = Dataset()
-        #train_dataset.load_data(X_train_scaled, y_train_scaled)
-        #train_loader = DataLoader(dataset=list(zip(X_train_scaled.values, y_train_scaled.values)), batch_size=params['batch_size'], shuffle=False)
-        # make torch dataset
-        X_train_sequences, y_train_sequences = create_sequences(X_train_scaled.values, y_train_scaled.values, params['sequence_length'])
-        X_val_sequences, y_val_sequences = create_sequences(X_val_scaled.values, y_val_scaled.values, params['sequence_length'])
-        train_dataset = TensorDataset(X_train_sequences, y_train_sequences)
-        val_dataset = TensorDataset(X_val_sequences, y_val_sequences)
-        train_loader = DataLoader(train_dataset, batch_size=params['batch_size'], shuffle=False)
-        val_loader = DataLoader(val_dataset, batch_size=params['batch_size'], shuffle=False)
-
+        train_loader, val_loader, test_loader, XScaler, yScaler = train_val_test_sequences(train_date_from=train_date_from_hyper,
+                                                                                           val_cutoff=val_date_from_hyper,
+                                                                                           test_cutoff=test_date_from_hyper,
+                                                                                           seq_length=params['sequence_length'],
+                                                                                           batch_size=params['batch_size'])
 
 
 
@@ -290,24 +329,22 @@ best_params = pickle.load(open(param_path, 'rb'))
 logger.info(f'Training model, with best hyperparameters {best_params}')
 
 
-def build_train_model(model, date_to_forecast, X_training, y_training, X_validation, y_validation, batch_size, epochs, device_name='cpu'):
+def train_model(model, date_to_forecast, train_loader, val_loader, batch_size, epochs):
     # setup model
-
 
     best_val_loss = np.inf
     train_losses = []
     val_losses = []
 
-    train_loader = DataLoader(dataset=list(zip(X_training.values, y_training.values)), batch_size=batch_size, shuffle=False)
-    val_loader = DataLoader(dataset=list(zip(X_validation.values, y_validation.values)), batch_size=batch_size, shuffle=False)
 
-    model.train()
     for epoch in range(epochs):
         train_loss = 0.0
         val_loss = 0.0
+
+        model.train()
         for i, (inputs, labels) in enumerate(train_loader):
             # transfer to GPU
-            inputs, labels = inputs.float().to(device_name), labels.float().to(device_name)
+            inputs, labels = inputs.float().to(device), labels.float().to(device)
             assert not torch.isnan(inputs).any()
             assert not torch.isnan(labels).any()
 
@@ -322,11 +359,10 @@ def build_train_model(model, date_to_forecast, X_training, y_training, X_validat
             train_loss += loss.item()
 
 
-
         model.eval()
         for i, (inputs, labels) in enumerate(val_loader):
             # transfer to GPU
-            inputs, labels = inputs.float().to(device_name), labels.float().to(device_name)
+            inputs, labels = inputs.float().to(device), labels.float().to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             val_loss += loss.item()
@@ -347,11 +383,11 @@ def build_train_model(model, date_to_forecast, X_training, y_training, X_validat
     #accuracy = val_losses[-1]
     # min of last 3 val losses
     # save model
-    model_path = os.path.join(os.getcwd(), 'models', f'{date_to_forecast.strftime("%Y-%m-%d")}_DNN4_model.pth')
+    model_path = os.path.join(os.getcwd(), 'models', f'{date_to_forecast.strftime("%Y-%m-%d")}_lstm_model.pth')
     torch.save(model.state_dict(), model_path)
 
     # save train and val losses
-    losses_path = os.path.join(os.getcwd(), 'losses', f'{date_to_forecast.strftime("%Y-%m-%d")}_DNN4_losses.pkl')
+    losses_path = os.path.join(os.getcwd(), 'losses', f'{date_to_forecast.strftime("%Y-%m-%d")}_lstm_losses.pkl')
     pickle.dump([train_losses, val_losses], open(losses_path, 'wb'))
 
     return model, train_losses, val_losses
@@ -364,120 +400,132 @@ def build_train_model(model, date_to_forecast, X_training, y_training, X_validat
 input_dim = X_train.shape[1]
 output_dim = 24
 
-
-best_params['batch_size'] = int(best_params['batch_size'])
-best_params['sequence_length'] = int(best_params['sequence_length'])
+epochs = 50
+##################################################
+best_params['batch_size'] = int(batch_size[best_params['batch_size']])
 best_params['hidden_size'] = int(best_params['hidden_size'])
-best_params['num_layers'] = int(best_params['num_layers'])
+best_params['num_layers'] = int(num_layers[best_params['num_layers']])
+best_params['sequence_length'] = int(seq_length[best_params['sequence_length']])
+if best_params['num_layers'] == 1:  # if only one layer, no dropout as this occurs between layers
+    best_params['dropout_rate'] = 0
+
+print(best_params)
+########### SETUP MODEL AND OPTIMIZER WITH BEST HYPERPARAMETERS #############
 
 
-model = LSTM(input_dim, best_params['hidden_size'], best_params['num_layers'], output_dim, best_params['dropout'], device_name='cpu')
+## Train model initially on training data
+train_loader_init, val_loader_init, _, _, _ = train_val_test_sequences(train_date_from=X.index[0],
+                                                                                      val_cutoff=val_cutoff,
+                                                                                      test_cutoff=test_cutoff,
+                                                                                      seq_length=best_params['sequence_length'],
+                                                                                      batch_size=best_params['batch_size'])
+
+model = LSTM(input_size=input_dim, hidden_size=best_params['hidden_size'], num_layers=best_params['num_layers'], output_size=output_dim, dropout=best_params['dropout_rate']).to(device)
 
 optimizer = optim.Adam(model.parameters(), lr=best_params['learning_rate'], weight_decay=best_params['weight_decay'])
-# loss
 criterion = nn.MSELoss()
+model.train()
+model, train_losses_initial, val_losses_initial = train_model(model=model,
+                                                                    date_to_forecast=test_cutoff,
+                                                                    train_loader=train_loader_init,
+                                                                    val_loader=val_loader_init,
+                                                                    batch_size=best_params['batch_size'],
+                                                                    epochs=epochs)
+#save losses
+losses_path = os.path.join(os.getcwd(), 'losses', f'LSTM_initial_train_data_losses.pkl')
+pickle.dump([train_losses_initial, val_losses_initial], open(losses_path, 'wb'))
 
-
-
-
-# first we train model on all data except last week before testing, then recalibrate afterwards only on 2 last years
-XScaler = Scaler()
-XScaler.fit(X_train.iloc[:, :-7])
-
-X_train_scaled = XScaler.transform(X_train.iloc[:, :-7])
-# add dummies
-X_train_scaled = pd.concat([X_train_scaled, X_train.iloc[:, -7:]], axis=1)
-X_val_scaled = XScaler.transform(X_val.iloc[:, :-7])
-X_val_scaled = pd.concat([X_val_scaled, X_val.iloc[:, -7:]], axis=1)
-
-yScaler = Scaler()
-yScaler.fit(y_train)
-y_train_scaled = yScaler.transform(y_train)
-y_val_scaled = yScaler.transform(y_val)
-
-model, _, _ = build_train_model(model=model, date_to_forecast=test_cutoff, X_training=X_train_scaled, y_training=y_train_scaled, X_validation=X_val_scaled, y_validation=y_val_scaled, batch_size=best_params['batch_size'], epochs=epochs, device_name=device)
-
-
-
-predictions_path = os.path.join(os.getcwd(), 'predictions', f'DNN4_predictions.pkl')
+predictions_path = os.path.join(os.getcwd(), 'predictions', f'LSTM_predictions.pkl')
 predictions = []
 
-epochs = 50
 
 
+calibration_window = pd.Timedelta(days=2 * 365)
+
+# only keep last month of X_test - crashed during last part
+
+
+# load newest model
+# load_model = True
+# if load_model:
+#     model_path = r'C:\Users\frede\PycharmProjects\Masters\models\LSTM\models\2022-11-30_lstm_model.pth'
+#     model = LSTM(input_size=input_dim, hidden_size=best_params['hidden_size'], num_layers=best_params['num_layers'], output_size=output_dim, dropout=best_params['dropout_rate']).to(device)
+#     model.load_state_dict(torch.load(model_path))
+#     optimizer = optim.Adam(model.parameters(), lr=best_params['learning_rate'], weight_decay=best_params['weight_decay'])
+#     criterion = nn.MSELoss()
+
+start_time = time.time()
 for i, date in enumerate(X_test.index):
-    X_train_date = X[(X.index < date - pd.Timedelta(days=7)) & (X.index > date - pd.Timedelta(days=2 * 365))]
-    y_train_date = y[(y.index < date - pd.Timedelta(days=7)) & (X.index > date - pd.Timedelta(days=2 * 365))]
-    X_val_date = X[(X.index >= date - pd.Timedelta(days=7)) & (X.index < date)]
-    y_val_date = y[(y.index >= date - pd.Timedelta(days=7)) & (y.index < date)]
-    X_test_date = X[X.index == date]
-    y_test_date = y[y.index == date]
-    # Transform data
-    XScaler = Scaler()
-    XScaler.fit(X_train_date.iloc[:, :-7])
-    X_train_date_transformed = XScaler.transform(X_train_date.iloc[:, :-7])
-    # add dummies
-    X_train_date_transformed = pd.concat([X_train_date_transformed, X_train_date.iloc[:, -7:]], axis=1)
-
-    X_val_date_transformed = XScaler.transform(X_val_date.iloc[:, :-7])
-    X_val_date_transformed = pd.concat([X_val_date_transformed, X_val_date.iloc[:, -7:]], axis=1)
-    X_test_date_transformed = XScaler.transform(X_test_date.iloc[:, :-7])
-    X_test_date_transformed = pd.concat([X_test_date_transformed, X_test_date.iloc[:, -7:]], axis=1)
-
-    # Make test pandas dataframe into tensor
-    X_test_date = torch.tensor(X_test_date.values).float().to(device)
-    yScaler = Scaler()
-    yScaler.fit(y_train_date)
-    y_train_date = yScaler.transform(y_train_date)
-    y_val_date = yScaler.transform(y_val_date)
-    y_test_date = yScaler.transform(y_test_date)
+    train_date_from = date - calibration_window
+    val_cutoff = date - pd.Timedelta(days=7)
+    test_cutoff = date
+    train_loader_date, val_loader_date, test_loader, X_scaler_date, y_scaler_date = train_val_test_sequences(train_date_from,
+                                                                                                             val_cutoff,
+                                                                                                             test_cutoff,
+                                                                                                             best_params['sequence_length'],
+                                                                                                             batch_size = best_params['batch_size'])
     # train model
     model.train()
-    model, train_losses, val_losses = build_train_model(model=model,
+    model, train_losses, val_losses = train_model(model=model,
                                                         date_to_forecast=date,
-                                                        X_training=X_train_date_transformed,
-                                                        y_training=y_train_date,
-                                                        X_validation=X_val_date_transformed,
-                                                        y_validation=y_val_date,
+                                                        train_loader=train_loader_date,
+                                                        val_loader=val_loader_date,
                                                         batch_size=best_params['batch_size'],
-                                                        epochs=epochs,
-                                                        device_name=device)
+                                                        epochs=epochs)
 
-
-    # predict and detach to cpu and make into pandas series
-    X_test_date_transformed = torch.tensor(X_test_date_transformed.values).float().to(device)
-    # disable dropout
     model = model.eval()
-    y_pred = model(X_test_date_transformed).detach().cpu().numpy()
-    y_pred = pd.DataFrame(y_pred, index=y_test_date.index)
-    y_pred = yScaler.inverse_transform(y_pred)
-    y_true = yScaler.inverse_transform(y_test_date)
+    for input, target in test_loader:
+        input = input.to(device)
+        target = target.to(device)
+        pred = model(input).detach().cpu().numpy()
 
+    # make prediction into dataframe 1 row, y columns and index of date
+    y_pred = pd.DataFrame(pred, index=[date])
+    y_pred = y_scaler_date.inverse_transform(y_pred)
+    y_true = y_test[y_test.index == date]
     predictions.append(y_pred)
-
-    logger.info(f'Training model for date {date} ({i+1}/{len(X_test.index)}): MAE: {mean_absolute_error(y_true, y_pred)}')
-    print(date, 'MAE:', round(mean_absolute_error(y_true, y_pred), 2))
-    print('predicted mean', round(y_pred.mean().mean(), 2))
-    print('true mean', round(y_true.mean().mean(), 2))
-
-    # every quarter, save model and losses and predictions
-    if date.month % 3 == 0 and date.day == 1:
-
-
+    # expectd runtime
+    elapsed_time = time.time() - start_time
+    expected_time = elapsed_time / (i + 1) * len(X_test.index)
+    logger.info(f'Date: {date} Expected time remaining: {(expected_time - elapsed_time) / 3600:.2f} hours, MAE: {mean_absolute_error(y_pred, y_true):.2f}')
+    print(f'Date: {date} Expected time remaining: {(expected_time - elapsed_time) / 3600:.2f} hours, MAE: {mean_absolute_error(y_pred, y_true):.2f}')
+    # every 3 months save predictions
+    if date.month % 3 == 0 and date.day == 30:
         # save predictions
-        predictions_path = os.path.join(os.getcwd(), 'predictions', f'{date.strftime("%Y-%m-%d")}_DNN4_predictions.pkl')
+        predictions_path = os.path.join(os.getcwd(), 'predictions', f'{date.strftime("%Y-%m-%d")}_lstm_predictions_1.pkl')
         pickle.dump(pd.concat(predictions, axis=0), open(predictions_path, 'wb'))
 
 
 
-# save predictions
-# concat predictions
+# # read all previous predictions
+# prediction_files = ['2021-03-01_lstm_predictions.pkl',
+#                     '2021-06-01_lstm_predictions.pkl',
+#                     '2021-09-01_lstm_predictions.pkl',
+#                     '2021-12-01_lstm_predictions.pkl',
+#                     '2022-03-01_lstm_predictions.pkl',
+#                     '2022-06-01_lstm_predictions.pkl',
+#                     '2022-09-01_lstm_predictions.pkl',
+#                     '2022-12-01_lstm_predictions.pkl']
+#
+# for file in os.listdir(os.path.join(os.getcwd(), 'predictions')):
+#     if file in prediction_files:
+#         predictions.append(pickle.load(open(os.path.join(os.getcwd(), 'predictions', file), 'rb')))
+# # concat predictions
+
+lstm_all_preds_path = os.path.join(os.getcwd(), 'predictions', f'lstm_preds_all.pkl')
 predictions = pd.concat(predictions, axis=0)
-predictions_path = os.path.join(os.getcwd(), 'predictions', f'DNN4_predictions_all.pkl')
-pickle.dump(predictions, open(predictions_path, 'wb'))
+pickle.dump(predictions, open(lstm_all_preds_path, 'wb'))
 
 
 # save actual values
-actuals_path = os.path.join(os.getcwd(), 'predictions', f'DNN4_actuals_all.pkl')
+actuals_path = os.path.join(os.getcwd(), 'predictions', f'lstm_actuals_all.pkl')
 pickle.dump(y_test, open(actuals_path, 'wb'))
+
+# read predictions
+
+os.chdir('..')
+os.chdir('..')
+os.chdir('results_app')
+predictions_path = os.path.join(os.getcwd(), f'lstm_preds_all.pkl')
+pickle.dump(predictions, open(predictions_path, 'wb'))
 
