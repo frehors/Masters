@@ -402,9 +402,12 @@ yScaler.fit(y_train)
 y_train_scaled = yScaler.transform(y_train)
 y_val_scaled = yScaler.transform(y_val)
 
-model, _, _ = build_train_model(model=model, date_to_forecast=test_cutoff, X_training=X_train_scaled, y_training=y_train_scaled, X_validation=X_val_scaled, y_validation=y_val_scaled, batch_size=best_params['batch_size'], epochs=epochs, device_name=device)
+model, train_losses_initial, val_losses_initial = build_train_model(model=model, date_to_forecast=test_cutoff, X_training=X_train_scaled, y_training=y_train_scaled, X_validation=X_val_scaled, y_validation=y_val_scaled, batch_size=best_params['batch_size'], epochs=epochs, device_name=device)
+# save losses
+losses_path = os.path.join(os.getcwd(), 'losses', f'DNN_initial_train_data_losses.pkl')
+pickle.dump([train_losses_initial, val_losses_initial], open(losses_path, 'wb'))
 
-
+raise Exception('stop')
 
 predictions_path = os.path.join(os.getcwd(), 'predictions', f'DNN4_predictions.pkl')
 predictions = []

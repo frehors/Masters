@@ -135,7 +135,6 @@ def create_dataset(target_col='DK1_price'):
 
     # drop columns with max = min = 0
     invalid_cols = [col for col in df.columns if df[col].max() == df[col].min()]
-    print(invalid_cols)
 
     #df.index = df.index.tz_localize('UTC')
 
