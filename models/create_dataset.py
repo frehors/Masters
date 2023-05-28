@@ -100,8 +100,9 @@ def create_dataset(target_col='DK1_price'):
     entsoe_df = entsoe_df.drop(columns=['DateTime', 'ResolutionCode', 'MapCode'])
 
     entsoe_df = entsoe_df.rename(columns={'Price': 'DE_price'})
+    # Not using DE price
 
-    price_df = pd.merge(price_df, entsoe_df, left_index=True, right_index=True)
+    #price_df = pd.merge(price_df, entsoe_df, left_index=True, right_index=True)
 
     df = pd.merge(df, price_df, left_index=True, right_index=True)
     # make temporal dummy features
@@ -122,7 +123,6 @@ def create_dataset(target_col='DK1_price'):
     # drop non lagged prices, as these are not available in real time, but keep target_col
     #price_cols = ['DK1_price', 'DK2_price', 'SE_price', 'NO_price', 'DE_price']
     price_cols = ['DK1_price']
-    df = df.drop(columns=[col for col in price_cols if col != target_col])
 
 
     df = pd.concat([df, pd.DataFrame(lagged_features, index=df.index)], axis=1)
@@ -135,11 +135,13 @@ def create_dataset(target_col='DK1_price'):
 
     # drop columns with max = min = 0
     invalid_cols = [col for col in df.columns if df[col].max() == df[col].min()]
-
+    print('invalid cols', invalid_cols)
     #df.index = df.index.tz_localize('UTC')
 
     df = df.drop(columns=invalid_cols)
+    print(df.shape[0])
     df = df.dropna()
+    print(df.shape[0])
     df = df.sort_index()
 
     return df

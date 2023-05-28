@@ -120,6 +120,17 @@ y = y.dropna()
 #start_cutoff = pd.to_datetime('2019-01-01 00:00')
 val_cutoff = pd.to_datetime('2020-07-01')
 test_cutoff = pd.to_datetime('2021-01-01')
+
+# naive_cutoff = test_cutoff - pd.Timedelta(days=7)
+# y_naive = y.loc[y.index >= naive_cutoff]
+#
+# y_naive = y_naive.shift(7, axis=0)  # days
+# y_naive = y_naive.loc[y_naive.index >= test_cutoff]
+# naive_path = r'C:\Users\frede\PycharmProjects\Masters\results_app'
+# pickle.dump(y_naive, open(os.path.join(naive_path, 'naive_forecast_all.pkl'), 'wb'))
+#
+# raise ValueError('stop')
+
 #X_train = X.loc[X.index >= start_cutoff & X.index < val_cutoff]
 X_train = X.loc[X.index < val_cutoff]
 X_val = X.loc[(X.index >= val_cutoff) & (X.index < test_cutoff)]
@@ -407,14 +418,14 @@ model, train_losses_initial, val_losses_initial = build_train_model(model=model,
 losses_path = os.path.join(os.getcwd(), 'losses', f'DNN_initial_train_data_losses.pkl')
 pickle.dump([train_losses_initial, val_losses_initial], open(losses_path, 'wb'))
 
-raise Exception('stop')
 
 predictions_path = os.path.join(os.getcwd(), 'predictions', f'DNN4_predictions.pkl')
 predictions = []
 
 calibration_window = pd.Timedelta(days=2 * 365)
 
-
+time_start = time.time()
+print(X_train.shape)
 for i, date in enumerate(X_test.index):
     start_time = time.time()
     X_train_date = X[(X.index < date - pd.Timedelta(days=7)) & (X.index > date - calibration_window)]
@@ -469,13 +480,18 @@ for i, date in enumerate(X_test.index):
     print(date, 'MAE:', round(mean_absolute_error(y_true, y_pred), 2), 'time:', round(time.time() - start_time, 2))
     #print('predicted mean', round(y_pred.mean().mean(), 2))
     #print('true mean', round(y_true.mean().mean(), 2))
+    time_elapsed = time.time() - time_start
+    time_per_day = time_elapsed / (i + 1)
+    days_remaining = len(X_test.index) - (i + 1)
+    time_remaining = time_per_day * days_remaining
+    print(f'Time remaining: {time_remaining / 3600} hours')
 
     # every quarter, save model and losses and predictions
     if date.month % 3 == 0 and date.day == 1:
 
 
         # save predictions
-        predictions_path = os.path.join(os.getcwd(), 'predictions', f'{date.strftime("%Y-%m-%d")}_DNN4_predictions.pkl')
+        predictions_path = os.path.join(os.getcwd(), 'predictions', f'{date.strftime("%Y-%m-%d")}_DNN4_predictions_2.pkl')
         pickle.dump(pd.concat(predictions, axis=0), open(predictions_path, 'wb'))
 
 
@@ -483,7 +499,7 @@ for i, date in enumerate(X_test.index):
 # save predictions
 # concat predictions
 predictions = pd.concat(predictions, axis=0)
-predictions_path = os.path.join(os.getcwd(), 'predictions', f'DNN4_predictions_all.pkl')
+predictions_path = os.path.join(os.getcwd(), 'predictions', f'DNN4_predictions_all_2.pkl')
 pickle.dump(predictions, open(predictions_path, 'wb'))
 
 

@@ -512,7 +512,7 @@ for i, date in enumerate(X_test.index):
 #         predictions.append(pickle.load(open(os.path.join(os.getcwd(), 'predictions', file), 'rb')))
 # # concat predictions
 
-lstm_all_preds_path = os.path.join(os.getcwd(), 'predictions', f'lstm_preds_all.pkl')
+lstm_all_preds_path = os.path.join(os.getcwd(), 'predictions', f'lstm_preds_all_2.pkl')
 predictions = pd.concat(predictions, axis=0)
 pickle.dump(predictions, open(lstm_all_preds_path, 'wb'))
 

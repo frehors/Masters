@@ -39,7 +39,8 @@ X = X.dropna()
 X = X.loc[:, (X != 0).any(axis=0)]
 # and some are 0 almost always, drop features with a MAD below threshold
 X = X.loc[:, X.sub(X.median(axis=0), axis=1).abs().median(axis=0) > 0.01]
-
+for col in X.columns:
+    print(col)
 #%%
 class Scaler:
 
@@ -481,7 +482,7 @@ model = TransformerModel(n_features=input_dim,
 optimizer = optim.Adam(model.parameters(), lr=best_params['learning_rate'], weight_decay=best_params['weight_decay'])
 criterion = nn.MSELoss()
 model.train()
-model, train_losses_initial, val_losses_initial = train_model(model=model,
+model,  train_losses_initial, val_losses_initial = train_model(model=model,
                                                                     date_to_forecast=test_cutoff,
                                                                     train_loader=train_loader_init,
                                                                     val_loader=val_loader_init,
@@ -492,18 +493,18 @@ losses_path = os.path.join(os.getcwd(), 'losses', f'Transformer_initial_train_da
 pickle.dump([train_losses_initial, val_losses_initial], open(losses_path, 'wb'))
 
 
-predictions_path = os.path.join(os.getcwd(), 'predictions', f'Transformer_predictions.pkl')
+predictions_path = os.path.join(os.getcwd(), 'predictions', f'Transformer_predictions_2.pkl')
 predictions = []
 
 
 
 calibration_window = pd.Timedelta(days=2 * 365)
 
-# only keep last month of X_test - crashed during last part
 
-
+print(X_train.shape)
 start_time = time.time()
 for i, date in enumerate(X_test.index):
+    test_time = time.time()
     train_date_from = date - calibration_window
     val_cutoff = date - pd.Timedelta(days=7)
     test_cutoff = date
@@ -537,13 +538,14 @@ for i, date in enumerate(X_test.index):
     expected_time = elapsed_time / (i + 1) * len(X_test.index)
     logger.info(f'Date: {date} Expected time remaining: {(expected_time - elapsed_time) / 3600:.2f} hours, MAE: {mean_absolute_error(y_pred, y_true):.2f}')
     print(f'Date: {date} Expected time remaining: {(expected_time - elapsed_time) / 3600:.2f} hours, MAE: {mean_absolute_error(y_pred, y_true):.2f}')
+    print(f'Time for test set: {time.time() - test_time:.2f} seconds')
     # every 3 months save predictions
     if date.month % 3 == 0 and date.day == 30:
         # save predictions
-        predictions_path = os.path.join(os.getcwd(), 'predictions', f'{date.strftime("%Y-%m-%d")}_transformer_predictions_1.pkl')
+        predictions_path = os.path.join(os.getcwd(), 'predictions', f'{date.strftime("%Y-%m-%d")}_transformer_predictions_2.pkl')
         pickle.dump(pd.concat(predictions, axis=0), open(predictions_path, 'wb'))
 
-transformer_all_preds_path = os.path.join(os.getcwd(), 'predictions', f'transformer_preds_all.pkl')
+transformer_all_preds_path = os.path.join(os.getcwd(), 'predictions', f'transformer_preds_all_2.pkl')
 predictions = pd.concat(predictions, axis=0)
 pickle.dump(predictions, open(transformer_all_preds_path, 'wb'))
 
