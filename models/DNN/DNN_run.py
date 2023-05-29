@@ -302,14 +302,15 @@ if optimize_hyperparameters:
 # load best hyper parameters
 param_path = os.path.join('.', 'best_params.pkl')
 best_params = pickle.load(open(param_path, 'rb'))
+print(best_params)
 
+raise Exception('stop here')
 # get another param to see if it works
 logger.info(f'Training model, with best hyperparameters {best_params}')
 
 
 def build_train_model(model, date_to_forecast, X_training, y_training, X_validation, y_validation, batch_size, epochs, device_name='cpu'):
     # setup model
-
 
     best_val_loss = np.inf
     train_losses = []
@@ -351,7 +352,7 @@ def build_train_model(model, date_to_forecast, X_training, y_training, X_validat
         train_losses.append(train_loss/len(train_loader))
         val_losses.append(val_loss/len(val_loader))
         # early stopping, every 5th epoch check if val loss has decreased
-        if epoch % 5 == 0:
+        if epoch % 5 == 0 and epoch > 1:
 
             # if val hasn't decreased for 5 epochs, stop
             if val_losses[-1] > best_val_loss:
