@@ -282,7 +282,7 @@ if optimize_hyperparameters:
     tpe_algorithm = tpe.suggest
 
     # Define the number of iterations
-    max_evals = 1500
+    max_evals = 1000
 
     # Initialize the trials object
     trials = Trials()
@@ -417,7 +417,6 @@ model, train_losses_initial, val_losses_initial = build_train_model(model=model,
 # save losses
 losses_path = os.path.join(os.getcwd(), 'losses', f'DNN_initial_train_data_losses.pkl')
 pickle.dump([train_losses_initial, val_losses_initial], open(losses_path, 'wb'))
-
 
 predictions_path = os.path.join(os.getcwd(), 'predictions', f'DNN4_predictions.pkl')
 predictions = []
