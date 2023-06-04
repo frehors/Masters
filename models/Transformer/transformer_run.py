@@ -492,7 +492,6 @@ model,  train_losses_initial, val_losses_initial = train_model(model=model,
 losses_path = os.path.join(os.getcwd(), 'losses', f'Transformer_initial_train_data_losses.pkl')
 pickle.dump([train_losses_initial, val_losses_initial], open(losses_path, 'wb'))
 
-raise Exception('stop')
 
 
 predictions_path = os.path.join(os.getcwd(), 'predictions', f'Transformer_predictions_2.pkl')

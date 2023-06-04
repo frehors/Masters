@@ -115,10 +115,10 @@ def create_dataset(target_col='DK1_price'):
     lagged_features = {}
 
     for col in df.columns:
-        if col != target_col:
-            for i in [1, 2, 3, 7]:
-                # lagged series
-                lagged_features['{}_lag_{}'.format(col, i)] = df[col].shift(i*24)
+        #if col != target_col:
+        for i in [1, 2, 3, 7]:
+            # lagged series
+            lagged_features['{}_lag_{}'.format(col, i)] = df[col].shift(i*24)
 
     # drop non lagged prices, as these are not available in real time, but keep target_col
     #price_cols = ['DK1_price', 'DK2_price', 'SE_price', 'NO_price', 'DE_price']
@@ -143,6 +143,8 @@ def create_dataset(target_col='DK1_price'):
     df = df.dropna()
     print(df.shape[0])
     df = df.sort_index()
+    for col in df.columns:
+        print(col)
 
     return df
 

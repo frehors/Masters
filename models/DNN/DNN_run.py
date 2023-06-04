@@ -178,7 +178,7 @@ class DNN4(nn.Module):
 
 # Tree structured parzen estimator
 
-optimize_hyperparameters = False
+optimize_hyperparameters = True
 batch_sizes = [2, 4, 8, 16, 32, 64, 128, 256, 512]
 if optimize_hyperparameters:
     from hyperopt import fmin, tpe, hp, Trials
@@ -304,7 +304,6 @@ param_path = os.path.join('.', 'best_params.pkl')
 best_params = pickle.load(open(param_path, 'rb'))
 print(best_params)
 
-raise Exception('stop here')
 # get another param to see if it works
 logger.info(f'Training model, with best hyperparameters {best_params}')
 

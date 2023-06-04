@@ -106,6 +106,7 @@ model = LEAR(calibration_window=calibration_window)
 
 # rename to 'Price' for some reason for this toolbox to work
 target_col = 'Price'
+print(X.shape)
 
 
 time_start = time.time()
@@ -113,7 +114,7 @@ for i, day in enumerate(day_range):
     if day.day == 1:
         logger.info(f'Predicting day {day} ({i+1}/{len(day_range)})')
         # save predictions
-        forecast.to_pickle(os.path.join(os.getcwd(), 'predictions', 'lear_preds_2.pkl'))
+        forecast.to_pickle(os.path.join(os.getcwd(), 'predictions', 'lear_preds_all.pkl'))
     # get train data
     X_train_date = X[X.index < day].values
     y_train_date = y[y.index < day].values
@@ -132,7 +133,7 @@ for i, day in enumerate(day_range):
     print(f'Time remaining: {time_remaining / 3600} hours')
 
 print(f'Time elapsed: {(time.time() - time_start)/3600} hours')
-forecast.to_pickle(os.path.join(os.getcwd(), 'predictions', 'lear_preds_2.pkl'))
+forecast.to_pickle(os.path.join(os.getcwd(), 'predictions', 'lear_preds_all.pkl'))
 
 
 
