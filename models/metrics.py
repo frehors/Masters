@@ -23,6 +23,7 @@ actuals = pd.read_pickle(os.path.join(os.getcwd(), 'results_app', 'actuals_all.p
 actuals.index = pd.to_datetime(actuals.index)
 actuals.columns = [i for i in range(24)]
 
+
 naive_forecast = pd.read_pickle(os.path.join(os.getcwd(), 'results_app', 'naive_forecast_all.pkl'))
 naive_forecast.index = pd.to_datetime(naive_forecast.index)
 naive_forecast.columns = [i for i in range(24)]
@@ -31,20 +32,24 @@ dnn_predictions = pd.read_pickle(os.path.join(os.getcwd(), 'results_app', 'dnn4_
 lear_predictions = pd.read_pickle(os.path.join(os.getcwd(), 'results_app', 'lear_preds_all.pkl'))
 lstm_predictions = pd.read_pickle(os.path.join(os.getcwd(), 'results_app', 'lstm_preds_all.pkl'))
 transformer_predictions = pd.read_pickle(os.path.join(os.getcwd(), 'results_app', 'transformer_preds_all.pkl'))
+transformer_long_predictions = pd.read_pickle(os.path.join(os.getcwd(), 'results_app', 'transformer_long_preds_all.pkl'))
 ##### YOu are here
 
 lear_predictions.index = pd.to_datetime(lear_predictions.index)
 dnn_predictions.index = pd.to_datetime(dnn_predictions.index)
 lstm_predictions.index = pd.to_datetime(lstm_predictions.index)
 transformer_predictions.index = pd.to_datetime(transformer_predictions.index)
-
+transformer_long_predictions.index = pd.to_datetime(transformer_long_predictions.index)
 
 #melt
 dnn_predictions_melt = pd.melt(dnn_predictions.reset_index(), id_vars='index', var_name='hour', value_name='dnn')
 lear_predictions_melt = pd.melt(lear_predictions.reset_index(), id_vars='index', var_name='hour', value_name='lear')
 lstm_predictions_melt = pd.melt(lstm_predictions.reset_index(), id_vars='index', var_name='hour', value_name='lstm')
 transformer_predictions_melt = pd.melt(transformer_predictions.reset_index(), id_vars='index', var_name='hour', value_name='transformer')
+transformer_long_predictions_melt = pd.melt(transformer_long_predictions.reset_index(), id_vars='index', var_name='hour', value_name='transformer_long')
 actuals_melt = pd.melt(actuals.reset_index(), id_vars='index', var_name='hour', value_name='actuals')
+#actuals_long = actuals_melt[actuals_melt['index'] <= '2021-06-30']
+
 naive_forecast_melt = pd.melt(naive_forecast.reset_index(), id_vars='index', var_name='hour', value_name='naive_forecast')
 # remove h from hour column in lear
 
@@ -55,6 +60,7 @@ dnn_predictions_melt['index'] = pd.to_datetime(dnn_predictions_melt['index']) + 
 lear_predictions_melt['index'] = pd.to_datetime(lear_predictions_melt['index']) + pd.to_timedelta(lear_predictions_melt['hour'], unit='h')
 lstm_predictions_melt['index'] = pd.to_datetime(lstm_predictions_melt['index']) + pd.to_timedelta(lstm_predictions_melt['hour'], unit='h')
 transformer_predictions_melt['index'] = pd.to_datetime(transformer_predictions_melt['index']) + pd.to_timedelta(transformer_predictions_melt['hour'], unit='h')
+transformer_long_predictions_melt['index'] = pd.to_datetime(transformer_long_predictions_melt['index']) + pd.to_timedelta(transformer_long_predictions_melt['hour'], unit='h')
 actuals_melt['index'] = pd.to_datetime(actuals_melt['index']) + pd.to_timedelta(actuals_melt['hour'], unit='h')
 naive_forecast_melt['index'] = pd.to_datetime(naive_forecast_melt['index']) + pd.to_timedelta(naive_forecast_melt['hour'], unit='h')
 # drop hour column
@@ -62,6 +68,7 @@ lear_predictions_melt.drop('hour', axis=1, inplace=True)
 dnn_predictions_melt.drop('hour', axis=1, inplace=True)
 lstm_predictions_melt.drop('hour', axis=1, inplace=True)
 transformer_predictions_melt.drop('hour', axis=1, inplace=True)
+transformer_long_predictions_melt.drop('hour', axis=1, inplace=True)
 actuals_melt.drop('hour', axis=1, inplace=True)
 naive_forecast_melt.drop('hour', axis=1, inplace=True)
 # sort
@@ -71,6 +78,7 @@ dnn_predictions_melt = dnn_predictions_melt.sort_values(by=['index'])
 lear_predictions_melt = lear_predictions_melt.sort_values(by=['index'])
 lstm_predictions_melt = lstm_predictions_melt.sort_values(by=['index'])
 transformer_predictions_melt = transformer_predictions_melt.sort_values(by=['index'])
+transformer_long_predictions_melt = transformer_long_predictions_melt.sort_values(by=['index'])
 
 # drop index column on all but actuals column
 # dnn_predictions_melt.drop('index', axis=1, inplace=True)
@@ -129,6 +137,21 @@ print('transformer mape: ', transformer_mape)
 print('transformer smape: ', transformer_smape)
 print('transformer rmae: ', transformer_rmae)
 
+
+# transformer long
+transformer_long_mae = round(mean_absolute_error(actuals_melt['actuals'], transformer_long_predictions_melt['transformer_long']), 2)
+transformer_long_rmse = round(mean_squared_error(actuals_melt['actuals'], transformer_long_predictions_melt['transformer_long'])**0.5, 2)
+transformer_long_mape = round(mean_absolute_percentage_error(actuals_melt['actuals'], transformer_long_predictions_melt['transformer_long']), 2)
+transformer_long_smape = sMAPE(actuals_melt['actuals'], transformer_long_predictions_melt['transformer_long'])
+transformer_long_rmae = rMAE(actuals_melt['actuals'], transformer_long_predictions_melt['transformer_long'], naive_forecast_melt['naive_forecast'])
+
+print('transformer_long mae: ', transformer_long_mae)
+print('transformer_long rmse: ', transformer_long_rmse)
+print('transformer_long mape: ', transformer_long_mape)
+print('transformer_long smape: ', transformer_long_smape)
+print('transformer_long rmae: ', transformer_long_rmae)
+
+
 # naive
 
 naive_mae = round(mean_absolute_error(actuals_melt['actuals'], naive_forecast_melt['naive_forecast']), 2)
@@ -143,11 +166,16 @@ print('naive mape: ', naive_mape)
 print('naive smape: ', naive_smape)
 print('naive rmae: ', naive_rmae)
 
+
+
+
 # now do Before Energy crisis and After Energy crisis
 # Before Energy crisis
 # until 2021-09-01
 
 crisis_cutoff = pd.to_datetime('2021-09-01')
+
+
 
 actuals_melt_before = actuals_melt[actuals_melt['index'] < crisis_cutoff]
 naive_forecast_melt_before = naive_forecast_melt[naive_forecast_melt['index'] < crisis_cutoff]
@@ -155,6 +183,7 @@ lear_predictions_melt_before = lear_predictions_melt[lear_predictions_melt['inde
 dnn_predictions_melt_before = dnn_predictions_melt[dnn_predictions_melt['index'] < crisis_cutoff]
 lstm_predictions_melt_before = lstm_predictions_melt[lstm_predictions_melt['index'] < crisis_cutoff]
 transformer_predictions_melt_before = transformer_predictions_melt[transformer_predictions_melt['index'] < crisis_cutoff]
+transformer_long_predictions_melt_before = transformer_long_predictions_melt[transformer_long_predictions_melt['index'] < crisis_cutoff]
 
 # lear
 lear_mae_before = round(mean_absolute_error(actuals_melt_before['actuals'], lear_predictions_melt_before['lear']), 2)
@@ -206,6 +235,21 @@ print('transformer mape before: ', transformer_mape_before)
 print('transformer smape before: ', transformer_smape_before)
 print('transformer rmae before: ', transformer_rmae_before)
 
+# transformer long before
+transformer_long_mae_before = round(mean_absolute_error(actuals_melt_before['actuals'], transformer_long_predictions_melt_before['transformer_long']), 2)
+transformer_long_rmse_before = round(mean_squared_error(actuals_melt_before['actuals'], transformer_long_predictions_melt_before['transformer_long'])**0.5, 2)
+transformer_long_mape_before = round(mean_absolute_percentage_error(actuals_melt_before['actuals'], transformer_long_predictions_melt_before['transformer_long']), 2)
+transformer_long_smape_before = sMAPE(actuals_melt_before['actuals'], transformer_long_predictions_melt_before['transformer_long'])
+transformer_long_rmae_before = rMAE(actuals_melt_before['actuals'], transformer_long_predictions_melt_before['transformer_long'], naive_forecast_melt_before['naive_forecast'])
+
+print('transformer long mae before: ', transformer_long_mae_before)
+print('transformer long rmse before: ', transformer_long_rmse_before)
+print('transformer long mape before: ', transformer_long_mape_before)
+print('transformer long smape before: ', transformer_long_smape_before)
+print('transformer long rmae before: ', transformer_long_rmae_before)
+
+
+
 # naive
 
 naive_mae_before = round(mean_absolute_error(actuals_melt_before['actuals'], naive_forecast_melt_before['naive_forecast']), 2)
@@ -220,6 +264,8 @@ print('naive mape before: ', naive_mape_before)
 print('naive smape before: ', naive_smape_before)
 print('naive rmae before: ', naive_rmae_before)
 
+
+
 #after crisis, define after
 actuals_melt_after = actuals_melt[actuals_melt['index'] >= crisis_cutoff]
 lear_predictions_melt_after = lear_predictions_melt[lear_predictions_melt['index'] >= crisis_cutoff]
@@ -227,7 +273,7 @@ dnn_predictions_melt_after = dnn_predictions_melt[dnn_predictions_melt['index'] 
 lstm_predictions_melt_after = lstm_predictions_melt[lstm_predictions_melt['index'] >= crisis_cutoff]
 transformer_predictions_melt_after = transformer_predictions_melt[transformer_predictions_melt['index'] >= crisis_cutoff]
 naive_forecast_melt_after = naive_forecast_melt[naive_forecast_melt['index'] >= crisis_cutoff]
-
+transformer_long_predictions_melt_after = transformer_long_predictions_melt[transformer_long_predictions_melt['index'] >= crisis_cutoff]
 #lear
 lear_mae_after = round(mean_absolute_error(actuals_melt_after['actuals'], lear_predictions_melt_after['lear']), 2)
 lear_rmse_after = round(mean_squared_error(actuals_melt_after['actuals'], lear_predictions_melt_after['lear'])**0.5, 2)
@@ -279,6 +325,19 @@ print('transformer mape after: ', transformer_mape_after)
 print('transformer smape after: ', transformer_smape_after)
 print('transformer rmae after: ', transformer_rmae_after)
 
+# transformer long after
+transformer_long_mae_after = round(mean_absolute_error(actuals_melt_after['actuals'], transformer_long_predictions_melt_after['transformer_long']), 2)
+transformer_long_rmse_after = round(mean_squared_error(actuals_melt_after['actuals'], transformer_long_predictions_melt_after['transformer_long'])**0.5, 2)
+transformer_long_mape_after = round(mean_absolute_percentage_error(actuals_melt_after['actuals'], transformer_long_predictions_melt_after['transformer_long']), 2)
+transformer_long_smape_after = sMAPE(actuals_melt_after['actuals'], transformer_long_predictions_melt_after['transformer_long'])
+transformer_long_rmae_after = rMAE(actuals_melt_after['actuals'], transformer_long_predictions_melt_after['transformer_long'], naive_forecast_melt_after['naive_forecast'])
+
+print('transformer long mae after: ', transformer_long_mae_after)
+print('transformer long rmse after: ', transformer_long_rmse_after)
+print('transformer long mape after: ', transformer_long_mape_after)
+print('transformer long smape after: ', transformer_long_smape_after)
+print('transformer long rmae after: ', transformer_long_rmae_after)
+
 # naive
 naive_mae_after = round(mean_absolute_error(actuals_melt_after['actuals'], naive_forecast_melt_after['naive_forecast']), 2)
 naive_rmse_after = round(mean_squared_error(actuals_melt_after['actuals'], naive_forecast_melt_after['naive_forecast'])**0.5, 2)
@@ -296,3 +355,72 @@ print('naive rmae after: ', naive_rmae_after)
 
 
 
+
+
+
+ensemble_model_dnn_lear = [lear_predictions_melt['lear'], dnn_predictions_melt['dnn']]
+ensemble_model_dnn_lear_transformer = [lear_predictions_melt['lear'], dnn_predictions_melt['dnn'], transformer_predictions_melt['transformer']]
+enseemble_model_dnn_lear_transformer_lstm = [lear_predictions_melt['lear'], dnn_predictions_melt['dnn'], transformer_predictions_melt['transformer'], lstm_predictions_melt['lstm']]
+
+#ensemble = np.average(ensemble_modles, axis=0, weights=[1/lear_mae_before, 1/dnn_mae_before])
+ens_dnn_lear = np.average(ensemble_model_dnn_lear, axis=0, weights=[0.5, 0.5])
+ens_dnn_lear_transformer = np.average(ensemble_model_dnn_lear_transformer, axis=0, weights=[0.33, 0.33, 0.33])
+ens_dnn_lear_transformer_lstm = np.average(enseemble_model_dnn_lear_transformer_lstm, axis=0, weights=[0.25, 0.25, 0.25, 0.25])
+
+
+ens_dnn_lear_dict = {'index': actuals_melt['index'], 'ensemble': ens_dnn_lear}
+ens_dnn_lear_transformer_dict = {'index': actuals_melt['index'], 'ensemble': ens_dnn_lear_transformer}
+ens_dnn_lear_transformer_lstm_dict = {'index': actuals_melt['index'], 'ensemble': ens_dnn_lear_transformer_lstm}
+
+#df
+ensemble_lear_dnn_predictions = pd.DataFrame(ens_dnn_lear_dict)
+ensemble_lear_dnn_transformer_predictions = pd.DataFrame(ens_dnn_lear_transformer_dict)
+ensemble_lear_dnn_transformer_lstm_predictions = pd.DataFrame(ens_dnn_lear_transformer_lstm_dict)
+
+
+# ensemble_lear_dnn_predictions_before = ensemble_lear_dnn_predictions[ensemble_lear_dnn_predictions['index'] < crisis_cutoff]
+# ensemble_lear_dnn_predictions_after = ensemble_lear_dnn_predictions[ensemble_lear_dnn_predictions['index'] >= crisis_cutoff]
+# ensemble_lear_dnn_transformer_predictions_before = ensemble_lear_dnn_transformer_predictions[ensemble_lear_dnn_transformer_predictions['index'] < crisis_cutoff]
+# ensemble_lear_dnn_transformer_predictions_after = ensemble_lear_dnn_transformer_predictions[ensemble_lear_dnn_transformer_predictions['index'] >= crisis_cutoff]
+# ensemble_lear_dnn_transformer_lstm_predictions_before = ensemble_lear_dnn_transformer_lstm_predictions[ensemble_lear_dnn_transformer_lstm_predictions['index'] < crisis_cutoff]
+# ensemble_lear_dnn_transformer_lstm_predictions_after = ensemble_lear_dnn_transformer_lstm_predictions[ensemble_lear_dnn_transformer_lstm_predictions['index'] >= crisis_cutoff]
+
+
+
+
+
+ens_lear_dnn_mae = round(mean_absolute_error(actuals_melt['actuals'], ensemble_lear_dnn_predictions['ensemble']), 2)
+ens_lear_dnn_rmse = round(mean_squared_error(actuals_melt['actuals'], ensemble_lear_dnn_predictions['ensemble'])**0.5, 2)
+ens_lear_dnn_mape = round(mean_absolute_percentage_error(actuals_melt['actuals'], ensemble_lear_dnn_predictions['ensemble']), 2)
+ens_lear_dnn_smape = sMAPE(actuals_melt['actuals'], ensemble_lear_dnn_predictions['ensemble'])
+ens_lear_dnn_rmae = rMAE(actuals_melt['actuals'], ensemble_lear_dnn_predictions['ensemble'], naive_forecast_melt['naive_forecast'])
+
+print('ensemble lear dnn mae: ', ens_lear_dnn_mae)
+print('ensemble lear dnn rmse: ', ens_lear_dnn_rmse)
+print('ensemble lear dnn mape: ', ens_lear_dnn_mape)
+print('ensemble lear dnn smape: ', ens_lear_dnn_smape)
+print('ensemble lear dnn rmae: ', ens_lear_dnn_rmae)
+
+ens_lear_dnn_transformer_mae = round(mean_absolute_error(actuals_melt['actuals'], ensemble_lear_dnn_transformer_predictions['ensemble']), 2)
+ens_lear_dnn_transformer_rmse = round(mean_squared_error(actuals_melt['actuals'], ensemble_lear_dnn_transformer_predictions['ensemble'])**0.5, 2)
+ens_lear_dnn_transformer_mape = round(mean_absolute_percentage_error(actuals_melt['actuals'], ensemble_lear_dnn_transformer_predictions['ensemble']), 2)
+ens_lear_dnn_transformer_smape = sMAPE(actuals_melt['actuals'], ensemble_lear_dnn_transformer_predictions['ensemble'])
+ens_lear_dnn_transformer_rmae = rMAE(actuals_melt['actuals'], ensemble_lear_dnn_transformer_predictions['ensemble'], naive_forecast_melt['naive_forecast'])
+
+print('ensemble lear dnn transformer mae: ', ens_lear_dnn_transformer_mae)
+print('ensemble lear dnn transformer rmse: ', ens_lear_dnn_transformer_rmse)
+print('ensemble lear dnn transformer mape: ', ens_lear_dnn_transformer_mape)
+print('ensemble lear dnn transformer smape: ', ens_lear_dnn_transformer_smape)
+print('ensemble lear dnn transformer rmae: ', ens_lear_dnn_transformer_rmae)
+
+ens_lear_dnn_transformer_lstm_mae = round(mean_absolute_error(actuals_melt['actuals'], ensemble_lear_dnn_transformer_lstm_predictions['ensemble']), 2)
+ens_lear_dnn_transformer_lstm_rmse = round(mean_squared_error(actuals_melt['actuals'], ensemble_lear_dnn_transformer_lstm_predictions['ensemble'])**0.5, 2)
+ens_lear_dnn_transformer_lstm_mape = round(mean_absolute_percentage_error(actuals_melt['actuals'], ensemble_lear_dnn_transformer_lstm_predictions['ensemble']), 2)
+ens_lear_dnn_transformer_lstm_smape = sMAPE(actuals_melt['actuals'], ensemble_lear_dnn_transformer_lstm_predictions['ensemble'])
+ens_lear_dnn_transformer_lstm_rmae = rMAE(actuals_melt['actuals'], ensemble_lear_dnn_transformer_lstm_predictions['ensemble'], naive_forecast_melt['naive_forecast'])
+
+print('ensemble lear dnn transformer lstm mae: ', ens_lear_dnn_transformer_lstm_mae)
+print('ensemble lear dnn transformer lstm rmse: ', ens_lear_dnn_transformer_lstm_rmse)
+print('ensemble lear dnn transformer lstm mape: ', ens_lear_dnn_transformer_lstm_mape)
+print('ensemble lear dnn transformer lstm smape: ', ens_lear_dnn_transformer_lstm_smape)
+print('ensemble lear dnn transformer lstm rmae: ', ens_lear_dnn_transformer_lstm_rmae)

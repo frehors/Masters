@@ -45,6 +45,7 @@ X['day_of_week'] = X.index.dayofweek
 X['day_of_week_0'] = X['day_of_week'].apply(lambda x: 1 if x == 0 else 0)
 X = pd.get_dummies(X, columns=['day_of_week'], drop_first=True) # last one should not be there, but we still use it?
 # apparently all variables need to be named Exogenous 1, 2, 3, etc.
+X_cols = X.columns
 X.columns = ['Exogenous ' + str(i) for i in range(1, X.shape[1] + 1)]
 
 # now y
@@ -93,9 +94,9 @@ calibration_window = 365 * 2  # 2 years
 day_range = pd.date_range(start=pd.to_datetime('2021-01-01'), end=pd.to_datetime('2022-12-31'), freq='D')
 #preds = pd.DataFrame(index=y_test.index, columns=['pred'])
 #preds_done = pd.read_pickle(os.path.join(os.getcwd(), 'predictions', 'lear_preds_all.pkl'))
-forecast = pd.read_pickle(os.path.join(os.getcwd(), 'predictions', 'lear_preds_2021.pkl'))
-#forecast = pd.DataFrame(index=X_test.index, columns=['h' + str(k) for k in range(24)])
-forecast.index = pd.to_datetime(forecast.index)
+#forecast = pd.read_pickle(os.path.join(os.getcwd(), 'predictions', 'lear_preds_2021.pkl'))
+forecast = pd.DataFrame(index=X_test.index, columns=['h' + str(k) for k in range(24)])
+#forecast.index = pd.to_datetime(forecast.index)
 #preds_done = preds_done.dropna()
 #preds_done.index = pd.to_datetime(preds_done.index)
 # Acess first element of list for each row in preds_done
@@ -111,7 +112,7 @@ print(X.shape)
 
 time_start = time.time()
 for i, day in enumerate(day_range):
-    if day.day == 1:
+    if day.day == 30:
         logger.info(f'Predicting day {day} ({i+1}/{len(day_range)})')
         # save predictions
         forecast.to_pickle(os.path.join(os.getcwd(), 'predictions', 'lear_preds_all.pkl'))
@@ -122,7 +123,16 @@ for i, day in enumerate(day_range):
     X_test_date = X[(X.index >= day) & (X.index < day + pd.Timedelta(days=1))].values
 
     pred = model.recalibrate_predict(X_train_date, y_train_date, X_test_date)
+    # print coefficients
+    models_coef = []
+    for i in range(24):
+        mc = pd.DataFrame(model.models[i].coef_, index=X_cols, columns=['coef'])
+        mc['hour'] = i
+        models_coef.append(mc)
 
+    # get top 5 coefficients for each model in models_ceof
+    top5 = pd.concat(models_coef).groupby('hour').apply(lambda x: x.nlargest(5, 'coef'))
+    raise Exception('stop')
     forecast.loc[day] = pred
     print(f'MAE: {mean_absolute_error(y_test[y_test.index == day.date()], pred)}')
     # time remaining

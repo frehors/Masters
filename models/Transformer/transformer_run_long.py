@@ -16,7 +16,6 @@ from torch.utils.data import DataLoader, Dataset
 import hyperopt
 import pickle
 import time
-from torchinfo import summary
 #%%
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
                     , handlers=[logging.FileHandler('transformer_run.log'), logging.StreamHandler()])
@@ -26,11 +25,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #%%
 # create dataset
 target_col = 'DK1_price'
-df = create_dataset(target_col, lags=True)
-#%%
+df = create_dataset(target_col, lags=False)
+
 y = df[target_col]
 X = df.drop(target_col, axis=1)
-#%%
+# test only keeping lags and wind germany
+#X = X[['DK1_price_lag_1', 'DE_Wind']]
+
 # Pivot hourly index out to columns so index is only date
 #pivot_columns = [col for col in X.columns if not col.startswith('day_of_week')]
 #X = X.pivot_table(index=X.index.date, columns=X.index.hour, values=pivot_columns)
@@ -39,9 +40,8 @@ X = X.dropna()
 # Some hours will only have 0 values, drop these columns (e.g. Solar)
 X = X.loc[:, (X != 0).any(axis=0)]
 # and some are 0 almost always, drop features with a MAD below threshold
-X = X.loc[:, X.sub(X.median(axis=0), axis=1).abs().median(axis=0) > 0.01]
-for col in X.columns:
-    print(col)
+#X = X.loc[:, X.sub(X.median(axis=0), axis=1).abs().median(axis=0) > 0.01]
+
 #%%
 class Scaler:
 
@@ -86,15 +86,14 @@ class Scaler:
 
         return X_inversed
 
-#%%
 #X = transform(X)
 X.index = pd.to_datetime(X.index)
-X['day_of_week'] = X.index.dayofweek
+#X['day_of_week'] = X.index.dayofweek
 
 # to dummies
 # day_of_week_0 column when day_of_week is 0, i.e. monday. 1 if monday, 0 otherwise
-X['day_of_week_0'] = X['day_of_week'].apply(lambda x: 1 if x == 0 else 0)
-X = pd.get_dummies(X, columns=['day_of_week'], drop_first=True) # last one should not be there, but we still use it?
+#X['day_of_week_0'] = X['day_of_week'].apply(lambda x: 1 if x == 0 else 0)
+#X = pd.get_dummies(X, columns=['day_of_week'], drop_first=True) # last one should not be there, but we still use it?
 
 # Drop Nan rows ( should be only first because im running UTC and thus the first "day" doesn't have 24 hrs)
 
@@ -150,8 +149,8 @@ class TransformerModel(nn.Module):
 
 def create_sequences(X, sequence_length):
     X_sequences = []
-    for i in range(len(X) - sequence_length):
-        X_sequences.append(X[i:i+sequence_length])
+    for i in range(sequence_length, len(X), 24):
+        X_sequences.append(X[i - sequence_length:i])
     X_sequences = np.array(X_sequences)
     X_sequences = torch.tensor(X_sequences).float()
     # swap dim 1 and 2
@@ -167,8 +166,12 @@ def train_val_test_sequences(train_date_from, val_cutoff, test_cutoff, seq_lengt
     # The dates are inclusive
     func_time = time.time()
     XScaler = Scaler()
-    X_local = X.copy()
+    # removing the first row beacuse its hour 23 the day before
+    X_local = X.iloc[1:].copy()
+    #y_local = y.iloc[1:].copy()
     y_local = y.copy()
+    y_local = y_local.iloc[int(seq_length/24):]
+
     X_train = X_local[(X_local.index >= train_date_from) & (X_local.index < val_cutoff)]
     XScaler.fit(X_train.iloc[:, :-7])
     X_scaled = XScaler.transform(X_local.iloc[:, :-7])
@@ -176,24 +179,40 @@ def train_val_test_sequences(train_date_from, val_cutoff, test_cutoff, seq_lengt
     X_scaled = pd.concat([X_scaled, X_local.iloc[:, -7:]], axis=1)
     yScaler = Scaler()
     yScaler.fit(y_local[(y_local.index >= train_date_from) & (y_local.index < val_cutoff)])
-    y_scaled = yScaler.transform(y)
+    y_scaled = yScaler.transform(y_local)
     # create sequences for all data
+    # each entry in X should be a sequence of seq_length of previous values up until the current value
     X_seq = create_sequences(X_scaled.values, seq_length)
+    # whole hour index of X
+    X_local = X_local[seq_length:]
+    X_local_first_date = X_local.index[0]
+    y_local = y_local.loc[y_local.index >= X_local_first_date]
+    #whole_hour_23_idx = X_local[X_local.index.hour == 23].index.get_loc
+    #whole_hour_23_idx = np.where(X_local[seq_length:].index.hour == 23)
+    # only use these idx
+    #whole_hour_23 = X_local.iloc[whole_hour_23_idx]
+
+
+    #X_seq = X_seq[whole_hour_23_idx]
+    #print(f'X_seq shape: {X_seq.shape}')
+
+
+    #X_seq = create_sequences(X_scaled.values, seq_length)
     # get index of data to use
 
     # we need to drop sequence length from the index as we have lost that many rows
-    X_local = X_local.iloc[seq_length:]
+    #X_local = X_local.iloc[seq_length:]
     # if test is iterable do smth
-    val_idx = np.where(X_local.index == val_cutoff)[0][0]
-    test_idx = np.where(X_local.index == test_cutoff)[0][0]
-    y_test_idx = np.where(y_local.index == test_cutoff)[0][0]
+    val_idx = np.where(y_local.index == val_cutoff)[0][0]
+    test_idx = np.where(y_local.index == test_cutoff)[0][0]
+
     # split X_seq and y_seq tensors into train, val and test sets
     X_train_seq = X_seq[:val_idx]
-    y_train_seq = y_scaled.iloc[:val_idx] # slice is not including end, works like range
+    y_train_seq = y_scaled.iloc[:val_idx]  # slice is not including end, works like range
     X_val_seq = X_seq[val_idx:test_idx]
     y_val_seq = y_scaled.iloc[val_idx:test_idx]
     X_test_seq = X_seq[test_idx] # gets the index of the test date
-    y_test_seq = y_scaled.iloc[y_test_idx]
+    y_test_seq = y_scaled.iloc[test_idx]
 
     # y to tensor
     y_train_seq = torch.tensor(y_train_seq.values).float()
@@ -222,14 +241,25 @@ def train_val_test_sequences(train_date_from, val_cutoff, test_cutoff, seq_lengt
 
 # Tree structured parzen estimator
 
+# TEST TEST EST
+
+#train_date_from = pd.to_datetime('2015-02-26')
+#val_date_from = pd.to_datetime('2020-07-01')
+#est_date = pd.to_datetime('2021-01-01')
+#equence_length = 24 * 3
+#batch_size = 32
+
+#train_loader, val_loader, test_loader, x_scale, y_scale = train_val_test_sequences(train_date_from, val_date_from, test_date, sequence_length, batch_size)
+
+
 optimize_hyperparameters = False
 
-batch_size = [2, 4, 8, 16, 32, 64, 128]
+batch_size = [2, 4, 8, 16, 32]
 num_encoder_layers = [i for i in range(1, 11)]
 num_decoder_layers = [i for i in range(1, 11)]
 encoder_dim_feedforward = [i for i in range(2**10, 2**12, 2**7)]
 decoder_dim_feedforward = [i for i in range(2**10, 2**12, 2**7)]
-seq_length = [1, 2, 3, 4, 6, 8, 12, 24]
+seq_length = [24 * i for i in range(1, 8)]
 num_heads = [i for i in range(2, 21, 2)]
 hidden_dim_multiplier = [i for i in range(2, 65, 2)]
 if optimize_hyperparameters:
@@ -345,7 +375,7 @@ if optimize_hyperparameters:
     tpe_algorithm = tpe.suggest
 
     # Define the number of iterations
-    max_evals = 500
+    max_evals = 10
 
     # Initialize the trials object
     trials = Trials()
@@ -354,25 +384,26 @@ if optimize_hyperparameters:
     best_params = fmin(objective, space, algo=tpe_algorithm, max_evals=max_evals, trials=trials, verbose=True)
 
     # Print the best hyperparameters
-    print("Best hyperparameters:", best_params)
+    #print("Best hyperparameters:", best_params)
     # save best parameters to pkl
-    param_path = r'C:\Users\frede\PycharmProjects\Masters\models\Transformer\best_params.pkl'
+    param_path = r'C:\Users\frede\PycharmProjects\Masters\models\Transformer\best_params_long.pkl'
     pickle.dump(best_params, open(param_path, 'wb'))
-    trials_path = r'C:\Users\frede\PycharmProjects\Masters\models\Transformer\trials.pkl'
+    trials_path = r'C:\Users\frede\PycharmProjects\Masters\models\Transformer\trials_long.pkl'
     pickle.dump(trials, open(trials_path, 'wb'))
 
 # load best hyper parameters
-param_path = os.path.join('.', 'best_params.pkl')
+param_path = os.path.join('.', 'best_params_long.pkl')
 best_params = pickle.load(open(param_path, 'rb'))
 
-batch_size = [2, 4, 8, 16, 32, 64, 128]
+batch_size = [2, 4, 8, 16, 32]
 num_encoder_layers = [i for i in range(1, 11)]
 num_decoder_layers = [i for i in range(1, 11)]
 encoder_dim_feedforward = [i for i in range(2**10, 2**12, 2**7)]
 decoder_dim_feedforward = [i for i in range(2**10, 2**12, 2**7)]
-seq_length = [1, 2, 3, 4, 6, 8, 12, 24]
+seq_length = [24 * i for i in range(1, 8)]
 num_heads = [i for i in range(2, 21, 2)]
 hidden_dim_multiplier = [i for i in range(2, 65, 2)]
+
 
 
 best_params['batch_size'] = int(batch_size[best_params['batch_size']])
@@ -437,7 +468,7 @@ def train_model(model, date_to_forecast, train_loader, val_loader, batch_size, e
 
             # if val hasn't decreased for 5 epochs, stop
             if val_losses[-1] > best_val_loss:
-                print(f'Terminated epoch {epoch + 1}/{epochs} early: train loss: {round(train_losses[-1], 2)}, val loss: {round(val_losses[-1], 2)}')
+                #print(f'Terminated epoch {epoch + 1}/{epochs} early: train loss: {round(train_losses[-1], 2)}, val loss: {round(val_losses[-1], 2)}')
                 break
             best_val_loss = val_losses[-1]
 
@@ -464,6 +495,11 @@ input_dim = X_train.shape[1]
 output_dim = 24
 
 epochs = 50
+train_loader_init, val_loader_init, _, _, _ = train_val_test_sequences(train_date_from=X.index[0],
+                                                                                      val_cutoff=val_cutoff,
+                                                                                      test_cutoff=test_cutoff,
+                                                                                      seq_length=best_params['sequence_length'],
+                                                                                      batch_size=best_params['batch_size'])
 
 model = TransformerModel(n_features=input_dim,
                          num_encoder_layers=best_params['num_encoder_layers'],
@@ -473,15 +509,6 @@ model = TransformerModel(n_features=input_dim,
                          dropout=best_params['dropout_rate'],
                          encoder_dim=best_params['encoder_dim_feedforward'],
                          decoder_dim=best_params['decoder_dim_feedforward']).to(device)
-
-print(summary(model))
-raise Exception('stop')
-
-train_loader_init, val_loader_init, _, _, _ = train_val_test_sequences(train_date_from=X.index[0],
-                                                                                      val_cutoff=val_cutoff,
-                                                                                      test_cutoff=test_cutoff,
-                                                                                      seq_length=best_params['sequence_length'],
-                                                                                      batch_size=best_params['batch_size'])
 
 
 optimizer = optim.Adam(model.parameters(), lr=best_params['learning_rate'], weight_decay=best_params['weight_decay'])
@@ -507,9 +534,8 @@ predictions = []
 calibration_window = pd.Timedelta(days=2 * 365)
 
 
-print(X_train.shape)
 start_time = time.time()
-for i, date in enumerate(X_test.index):
+for i, date in enumerate(y_test.index):
     test_time = time.time()
     train_date_from = date - calibration_window
     val_cutoff = date - pd.Timedelta(days=7)
@@ -544,7 +570,7 @@ for i, date in enumerate(X_test.index):
     expected_time = elapsed_time / (i + 1) * len(X_test.index)
     logger.info(f'Date: {date} Expected time remaining: {(expected_time - elapsed_time) / 3600:.2f} hours, MAE: {mean_absolute_error(y_pred, y_true):.2f}')
     print(f'Date: {date} Expected time remaining: {(expected_time - elapsed_time) / 3600:.2f} hours, MAE: {mean_absolute_error(y_pred, y_true):.2f}')
-    print(f'Time for test set: {time.time() - test_time:.2f} seconds')
+    #print(f'Time for test set: {time.time() - test_time:.2f} seconds')
     # every 3 months save predictions
     if date.month % 3 == 0 and date.day == 30:
         # save predictions
@@ -565,5 +591,5 @@ pickle.dump(y_test, open(actuals_path, 'wb'))
 os.chdir('..')
 os.chdir('..')
 os.chdir('results_app')
-predictions_path = os.path.join(os.getcwd(), f'transformer_preds_all.pkl')
+predictions_path = os.path.join(os.getcwd(), f'transformer_long_preds_all.pkl')
 pickle.dump(predictions, open(predictions_path, 'wb'))

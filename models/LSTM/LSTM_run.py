@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, Dataset
 import hyperopt
 import pickle
 import time
+from torchinfo import summary
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
                     , handlers=[logging.FileHandler('LSTM_run.log'), logging.StreamHandler()])
@@ -421,7 +422,8 @@ train_loader_init, val_loader_init, _, _, _ = train_val_test_sequences(train_dat
                                                                                       batch_size=best_params['batch_size'])
 
 model = LSTM(input_size=input_dim, hidden_size=best_params['hidden_size'], num_layers=best_params['num_layers'], output_size=output_dim, dropout=best_params['dropout_rate']).to(device)
-
+print(summary(model))
+raise Exception('stop')
 optimizer = optim.Adam(model.parameters(), lr=best_params['learning_rate'], weight_decay=best_params['weight_decay'])
 criterion = nn.MSELoss()
 model.train()

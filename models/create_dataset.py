@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 
-def create_dataset(target_col='DK1_price'):
+def create_dataset(target_col='DK1_price', lags=True):
     path = r'C:\Users\frede\PycharmProjects\Masters\data\data\DayAheadGenerationForecastForWindAndSolar_14.1.D\big_df.pkl'
 
     keep_countries = ['DK1', 'DK2', 'SE', 'NO', 'DE']
@@ -113,19 +113,23 @@ def create_dataset(target_col='DK1_price'):
 
     # make lagged features
     lagged_features = {}
+    if lags:
+        for col in df.columns:
+            #if col != target_col:
+            for i in [1, 2, 3, 7]:
+                # lagged series
+                lagged_features['{}_lag_{}'.format(col, i)] = df[col].shift(i*24)
 
-    for col in df.columns:
-        #if col != target_col:
-        for i in [1, 2, 3, 7]:
-            # lagged series
-            lagged_features['{}_lag_{}'.format(col, i)] = df[col].shift(i*24)
-
-    # drop non lagged prices, as these are not available in real time, but keep target_col
-    #price_cols = ['DK1_price', 'DK2_price', 'SE_price', 'NO_price', 'DE_price']
-    price_cols = ['DK1_price']
+        # drop non lagged prices, as these are not available in real time, but keep target_col
+        #price_cols = ['DK1_price', 'DK2_price', 'SE_price', 'NO_price', 'DE_price']
+        price_cols = ['DK1_price']
 
 
-    df = pd.concat([df, pd.DataFrame(lagged_features, index=df.index)], axis=1)
+        df = pd.concat([df, pd.DataFrame(lagged_features, index=df.index)], axis=1)
+    # we still want price lag 1 even if we don't use lagged features
+    if not lags:
+        df['DK1_price_lag_1'] = df['DK1_price'].shift(24)
+
     df['day_of_week'] = df.index.dayofweek
 
     # to dummies
@@ -148,5 +152,5 @@ def create_dataset(target_col='DK1_price'):
 
     return df
 
-
+df = create_dataset(lags=False)
 

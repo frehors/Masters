@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader, Dataset
 import hyperopt
 import pickle
 import time
+from torchinfo import summary
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
                     , handlers=[logging.FileHandler('DNN.log'), logging.StreamHandler()])
@@ -178,7 +179,7 @@ class DNN4(nn.Module):
 
 # Tree structured parzen estimator
 
-optimize_hyperparameters = True
+optimize_hyperparameters = False
 batch_sizes = [2, 4, 8, 16, 32, 64, 128, 256, 512]
 if optimize_hyperparameters:
     from hyperopt import fmin, tpe, hp, Trials
@@ -380,7 +381,7 @@ def build_train_model(model, date_to_forecast, X_training, y_training, X_validat
 # setup model
 input_dim = X_train.shape[1]
 output_dim = 24
-
+print(f'input dim {input_dim}')
 best_params['num_neurons_1'] = int(best_params['num_neurons_1'])
 best_params['num_neurons_2'] = int(best_params['num_neurons_2'])
 best_params['num_neurons_3'] = int(best_params['num_neurons_3'])
@@ -390,7 +391,8 @@ model = DNN4(input_dim,
              output_dim,
              [best_params['num_neurons_1'], best_params['num_neurons_2'], best_params['num_neurons_3']],
              best_params['dropout_rate']).to(device)
-
+print(summary(model))
+raise Exception('stop')
 optimizer = optim.Adam(model.parameters(), lr=best_params['learning_rate'], weight_decay=best_params['weight_decay'])
 # loss
 criterion = nn.MSELoss()
